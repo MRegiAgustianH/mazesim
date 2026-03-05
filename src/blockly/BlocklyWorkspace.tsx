@@ -41,6 +41,7 @@ const toolboxInfo = {
         { kind: 'block', type: 'mrb_pickup' },
         { kind: 'block', type: 'mrb_putdown' },
         { kind: 'block', type: 'mrb_blink' },
+        { kind: 'block', type: 'mrb_lc' },
       ],
     }
   ],
@@ -51,6 +52,7 @@ export const BlocklyWorkspace: React.FC = () => {
   const blocklyInstance = useRef<Blockly.WorkspaceSvg | null>(null);
   const setArduinoCode = useStore((state) => state.setArduinoCode);
   const setJsCode = useStore((state) => state.setJsCode);
+  const setWorkspaceXml = useStore((state) => state.setWorkspaceXml);
 
   useEffect(() => {
     // Register custom elements
@@ -88,11 +90,16 @@ export const BlocklyWorkspace: React.FC = () => {
           const inoCode = arduinoGenerator.workspaceToCode(blocklyInstance.current);
           setJsCode(jsCode);
           setArduinoCode(inoCode);
+
+          const xmlDom = Blockly.Xml.workspaceToDom(blocklyInstance.current);
+          const xmlText = Blockly.Xml.domToText(xmlDom);
+          setWorkspaceXml(xmlText);
         }
       });
 
       // Load initial layout matching Arduino template
-      const xml = `
+      const savedXml = localStorage.getItem('blockly_workspace_save');
+      const defaultXml = `
                 <xml>
                   <block type="mrb_setup" x="50" y="50" deletable="false" movable="false">
                     <next>
@@ -109,7 +116,11 @@ export const BlocklyWorkspace: React.FC = () => {
                   </block>
                 </xml>
             `;
-      Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), blocklyInstance.current);
+      const xmlToLoad = savedXml || defaultXml;
+      Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xmlToLoad), blocklyInstance.current);
+      if (savedXml) {
+        setWorkspaceXml(savedXml);
+      }
     }
 
     return () => {

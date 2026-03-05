@@ -6,6 +6,7 @@ export const setupJsGenerator = () => {
     javascriptGenerator.forBlock['mrb_setup'] = (_block: any) => `await sim.mazeSetup();\n`;
     javascriptGenerator.forBlock['mrb_start'] = (_block: any) => `await sim.waitStart();\n`;
     javascriptGenerator.forBlock['mrb_blink'] = (_block: any) => `await sim.blink();\n`;
+    javascriptGenerator.forBlock['mrb_lc'] = (_block: any) => `await sim.lc(${getNumber(_block, 'COLOR')});\n`;
 
     javascriptGenerator.forBlock['mrb_motor'] = (_block: any) =>
         `await sim.motor(${getNumber(_block, 'L_SPEED')}, ${getNumber(_block, 'R_SPEED')}, ${getNumber(_block, 'DELAY')});\n`;

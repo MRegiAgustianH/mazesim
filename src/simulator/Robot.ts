@@ -16,9 +16,10 @@ export class Robot {
     lSpeed: number = 0;
     rSpeed: number = 0;
 
-    // 8 sensors at the front
     sensors: number[] = [0, 0, 0, 0, 0, 0, 0, 0];
     ctx: CanvasRenderingContext2D | null = null;
+    lineColor: number = 0; // 0 for dark line (default), 1 for light line
+    pixelsPerCm: number = 5.33;
 
     _isSimulationRunning: boolean = false;
     _tickResolve: (() => void) | null = null;
@@ -27,14 +28,15 @@ export class Robot {
         this.x = startX;
         this.y = startY;
         this.angle = startAngle;
+        this.pixelsPerCm = pixelsPerCm;
 
         // Scale the robot to match track physics
         this.width = this.PHYSICAL_WIDTH_CM * pixelsPerCm;
         this.height = this.PHYSICAL_HEIGHT_CM * pixelsPerCm;
 
         // Sensor spacing roughly covers the front width (18.5cm) across 8 sensors
-        // Assuming about 2cm between each sensor
-        this.sensorSpacing = 2.0 * pixelsPerCm;
+        // Assuming about 1.5cm between each sensor
+        this.sensorSpacing = 1.5 * pixelsPerCm;
 
         // Base velocity mapped to physics scaling
         this.speedScale = pixelsPerCm * 0.7; // ~0.7 cm per millisecond per unit of PWM
@@ -70,24 +72,27 @@ export class Robot {
         }
     }
 
+    getSensorLocalPosition(i: number) {
+        // Defines the "M" or "batman" shape of the sensor bar:
+        // 2 center sensors are slightly pushed back ("aga mundur tidak moncong")
+        // Outer sensors are pushed back to form the curve.
+        const pullbacks = [1.5, 0.7, 0.0, 0.4, 0.4, 0.0, 0.7, 1.5]; // unit in cm
+        const pullbackPx = pullbacks[i] * this.pixelsPerCm;
+        const forwardX = this.height / 2 - pullbackPx;
+
+        const offsetFromCenter = i - 3.5;
+        const rightY = offsetFromCenter * this.sensorSpacing;
+
+        return { forwardX, rightY };
+    }
+
     readSensors() {
         if (!this.ctx) return;
 
-        // Simulate 8 sensors across the front
-        const curveAmount = 0.5; // Controls the bow of the curve
-
         for (let i = 0; i < 8; i++) {
-            // Index 0 to 7 -> center is 3.5.
-            // The physical array is at the front of the robot. 
-            // When angle=0, robot faces right. 
-            // Front is at X = +this.height/2.
-            // Left-to-right spread is along the Y axis.
-            const offsetFromCenter = i - 3.5;
-
-            // X position: Front of the robot, slightly pulled back for the arc curve.
-            const localX = this.height / 2 - (Math.abs(offsetFromCenter) * Math.abs(offsetFromCenter) * curveAmount);
-            // Y position: Spread from left to right (- to +)
-            const localY = offsetFromCenter * this.sensorSpacing;
+            const pos = this.getSensorLocalPosition(i);
+            const localX = pos.forwardX;
+            const localY = pos.rightY;
 
             // Transform local to global map coordinates
             const globalX = this.x + localX * Math.cos(this.angle) - localY * Math.sin(this.angle);
@@ -95,90 +100,152 @@ export class Robot {
 
             // Read pixel data
             const pixel = this.ctx.getImageData(globalX, globalY, 1, 1).data;
-            // Background is white (255,255,255), line is dark grey/black (34,34,34). 
-            // Average < 128 -> Sum < 384
-            const isDark = (pixel[0] + pixel[1] + pixel[2]) < 384;
+            const pixelSum = pixel[0] + pixel[1] + pixel[2];
 
-            this.sensors[i] = isDark ? 1 : 0;
+            let isLine = false;
+            // Background is white (255,255,255), line is dark grey/black (34,34,34).
+            // Average < 128 -> Sum < 384
+            if (this.lineColor === 0) {
+                isLine = pixelSum < 384; // Dark line
+            } else {
+                isLine = pixelSum > 384; // Light line
+            }
+
+            this.sensors[i] = isLine ? 1 : 0;
         }
     }
 
     draw(ctx: CanvasRenderingContext2D) {
         ctx.save();
         ctx.translate(this.x, this.y);
-        // Add 90 degrees since 0 rad is pointing right, but car drawn pointing up
         ctx.rotate(this.angle + Math.PI / 2);
 
-        // Draw robot body
-        ctx.fillStyle = '#3b82f6'; // blue
-        ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+        const bodyColor = '#0f766e'; // sketch green/blue PCB color
+        const wheelColor = '#be123c'; // red wheels from photo
+        const battColor = '#dc2626'; // battery red color
+        const stemColor = '#e2e8f0'; // white neck
+        const headColor = '#1e3a8a'; // dark blue for sensor head
 
-        // Draw wheels
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(-this.width / 2 - 4, -this.height / 4, 4, this.height / 2);
-        ctx.fillRect(this.width / 2, -this.height / 4, 4, this.height / 2);
+        // The main chassis is around 45% of the full sensor width
+        const bodyWidth = this.width * 0.45;
+        const bodyHeight = this.height * 0.35;
+        // Make wheels scale relative to body width
+        const wheelWidth = this.width * 0.12;
+        const wheelHeight = bodyHeight * 0.95;
 
-        // Draw 8 sensors with arc curve
-        const curveAmount = 0.5;
-        // To make the visual debugging dots match the global raycast coordinates exactly,
-        // we'll draw them in global space instead of local space.
+        // Scale gaps relative to overall width
+        const wheelGap = this.width * 0.02;
+
+        // Draw wheels (Red like photo)
+        ctx.fillStyle = wheelColor;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(-bodyWidth / 2 - wheelWidth - wheelGap, -wheelHeight / 2, wheelWidth, wheelHeight, wheelWidth * 0.2);
+            ctx.roundRect(bodyWidth / 2 + wheelGap, -wheelHeight / 2, wheelWidth, wheelHeight, wheelWidth * 0.2);
+        } else {
+            ctx.fillRect(-bodyWidth / 2 - wheelWidth - wheelGap, -wheelHeight / 2, wheelWidth, wheelHeight);
+            ctx.fillRect(bodyWidth / 2 + wheelGap, -wheelHeight / 2, wheelWidth, wheelHeight);
+        }
+        ctx.fill();
+
+        // Draw main chassis (rear body around battery/wheels)
+        ctx.fillStyle = bodyColor;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(-bodyWidth / 2, -bodyHeight / 2, bodyWidth, bodyHeight, bodyWidth * 0.1);
+        } else {
+            ctx.fillRect(-bodyWidth / 2, -bodyHeight / 2, bodyWidth, bodyHeight);
+        }
+        ctx.fill();
+
+        // Draw battery pack area (reddish) inside main chassis
+        ctx.fillStyle = battColor;
+        const battWidth = bodyWidth * 0.6;
+        const battHeight = bodyHeight * 0.6;
+        ctx.fillRect(-battWidth / 2, -battHeight * 0.2, battWidth, battHeight);
+
+        // Draw central stem (leher putih datar) connecting battery to the front sensor bar
+        ctx.fillStyle = stemColor;
+        const stemWidth = bodyWidth * 0.25;
+        // In canvas, UP is -Y. From center of battery, UP to the sensor array.
+        const stemStartY = -battHeight * 0.2;
+        const stemEndY = -this.height * 0.45;
+        ctx.fillRect(-stemWidth / 2, stemEndY, stemWidth, stemStartY - stemEndY);
+
+        // Draw sensor bar (kepala biru tua melengkung)
+        ctx.strokeStyle = headColor;
+        // Scale stroke thickness based on height
+        ctx.lineWidth = this.height * 0.18;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
         for (let i = 0; i < 8; i++) {
-            const offsetFromCenter = i - 3.5;
-            // The physical array is at the front of the robot. 
-            // When angle=0, robot faces right. 
-            // Front is at X = +this.height/2.
-            // Left-to-right spread is along the Y axis.
+            const pos = this.getSensorLocalPosition(i);
+            const canvasX = pos.rightY;
+            // Shift up slightly relative to thickness so dots stay inside
+            const canvasY = -pos.forwardX + (this.height * 0.02);
+            if (i === 0) ctx.moveTo(canvasX, canvasY);
+            else ctx.lineTo(canvasX, canvasY);
+        }
+        ctx.stroke();
 
-            // X position: Front of the robot, slightly pulled back for the arc curve.
-            const localX = this.height / 2 - (Math.abs(offsetFromCenter) * Math.abs(offsetFromCenter) * curveAmount);
-            // Y position: Spread from left to right (- to +)
-            const localY = offsetFromCenter * this.sensorSpacing;
+        ctx.restore(); // Exit local rotation space
 
-            // Transform local to global map coordinates
-            const globalX = this.x + localX * Math.cos(this.angle) - localY * Math.sin(this.angle);
-            const globalY = this.y + localX * Math.sin(this.angle) + localY * Math.cos(this.angle);
+        // To make the visual debugging dots match the global raycast coordinates exactly,
+        // we draw them in global space.
+        for (let i = 0; i < 8; i++) {
+            const pos = this.getSensorLocalPosition(i);
 
-            let isDark = false;
-            // Physical IR spread radius (approx 0.25cm = 1/6 of sensorSpacing 1.5cm)
+            const globalX = this.x + pos.forwardX * Math.cos(this.angle) - pos.rightY * Math.sin(this.angle);
+            const globalY = this.y + pos.forwardX * Math.sin(this.angle) + pos.rightY * Math.cos(this.angle);
+
+            let isLine = false;
+            // Physical IR spread radius
             const optRadius = Math.max(1, Math.floor(this.sensorSpacing / 6));
 
-            // Read pixel data in a bounding box rather than a single 1x1 pixel
             if (this.ctx) {
                 const boxSize = optRadius * 2;
-                const imgData = this.ctx.getImageData(globalX - optRadius, globalY - optRadius, boxSize, boxSize).data;
+                // Add boundary check to ensure we don't request negative or out-of-bounds size
+                if (boxSize > 0) {
+                    const imgData = this.ctx.getImageData(globalX - optRadius, globalY - optRadius, boxSize, boxSize).data;
 
-                // If ANY pixel in the optical cone is dark, the sensor triggers
-                for (let j = 0; j < imgData.length; j += 4) {
-                    if ((imgData[j] + imgData[j + 1] + imgData[j + 2]) < 384) {
-                        isDark = true;
-                        break;
+                    for (let j = 0; j < imgData.length; j += 4) {
+                        const pixelSum = imgData[j] + imgData[j + 1] + imgData[j + 2];
+                        if (this.lineColor === 0) {
+                            if (pixelSum < 384) {
+                                isLine = true;
+                                break;
+                            }
+                        } else {
+                            if (pixelSum > 384) {
+                                isLine = true;
+                                break;
+                            }
+                        }
                     }
                 }
             }
 
-            this.sensors[i] = isDark ? 1 : 0;
+            this.sensors[i] = isLine ? 1 : 0;
 
-            // Draw physical sensor optical footprint for debugging
-            ctx.restore();
-            ctx.save();
+            // Draw sensor diode dot (Red like user sketch)
             ctx.beginPath();
-            ctx.arc(globalX, globalY, Math.max(3, optRadius), 0, Math.PI * 2);
-            ctx.fillStyle = isDark ? 'red' : 'white';
+            ctx.arc(globalX, globalY, Math.max(2, optRadius), 0, Math.PI * 2);
+            ctx.fillStyle = isLine ? '#ef4444' : '#ffffff'; // red if triggered, white if not
             ctx.fill();
-            ctx.strokeStyle = '#aaa';
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = isLine ? '#b91c1c' : '#999';
             ctx.stroke();
-
-            // Go back into local rotation for the next loop (if needed, though we restore again at end)
-            ctx.restore();
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.angle + Math.PI / 2);
         }
-
-        ctx.restore();
     }
 
     // ---- mrbMaze42 API Implementations ----
+
+    // (line color) mengatur membaca garis gelap/hitam (0) atau garis terang/putih (1)
+    async lc(color: number) {
+        await this.checkStop();
+        this.lineColor = color;
+    }
 
     sleep(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -198,11 +265,13 @@ export class Robot {
 
     async mazeSetup() {
         console.log("Maze Setup");
+        this.lineColor = 0; // Reset to default dark line
         await this.sleep(100);
     }
 
     async waitStart() {
         console.log("Waiting for Start");
+        this.lineColor = 0; // Reset to default dark line just in case
         await this.sleep(500); // Simulate start button press
     }
 

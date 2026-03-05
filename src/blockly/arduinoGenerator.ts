@@ -23,16 +23,28 @@ void setup() {
 void loop() {
   // start code here ! -------------------------
 ${code}
+
+
   // end of code -------------------------------
   my.end();
 }`;
 };
 
+arduinoGenerator.scrub_ = function (block: Blockly.Block, code: string, thisOnly?: boolean): string {
+  const nextBlock = block.nextConnection && block.nextConnection.targetBlock();
+  const nextCode = thisOnly ? '' : arduinoGenerator.blockToCode(nextBlock);
+  return code + nextCode;
+};
+
 const getNumber = (_block: any, field: string) => _block.getFieldValue(field);
 
-arduinoGenerator.forBlock['mrb_setup'] = (_block: any) => `  my.mazeSetup();\n`;
-arduinoGenerator.forBlock['mrb_start'] = (_block: any) => `  my.start();\n`;
+// Because these blocks are the root nodes connected to everyone else in the workspace tree, 
+// they MUST return at least some valid string/comment so Blockly doesn't break the code generation chain.
+// By returning a simple space, we ensure the next block is safely appended.
+arduinoGenerator.forBlock['mrb_setup'] = (_block: any) => `\n`;
+arduinoGenerator.forBlock['mrb_start'] = (_block: any) => `\n`;
 arduinoGenerator.forBlock['mrb_blink'] = (_block: any) => `  my.blink();\n`;
+arduinoGenerator.forBlock['mrb_lc'] = (_block: any) => `  my.lineColour(${getNumber(_block, 'COLOR')});\n`;
 
 arduinoGenerator.forBlock['mrb_motor'] = (_block: any) =>
   `  my.motor(${getNumber(_block, 'L_SPEED')}, ${getNumber(_block, 'R_SPEED')}, ${getNumber(_block, 'DELAY')});\n`;

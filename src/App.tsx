@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Play, Square, RotateCcw } from 'lucide-react';
+import { Download, Play, Square, RotateCcw, Save } from 'lucide-react';
 import { BlocklyWorkspace } from './blockly/BlocklyWorkspace';
 import { CanvasRenderer } from './simulator/CanvasRenderer';
 import { useStore } from './store/useStore';
@@ -15,16 +15,60 @@ function App() {
   const activeTrackHeightCm = useStore((state) => state.activeTrackHeightCm);
   const setActiveTrackHeightCm = useStore((state) => state.setActiveTrackHeightCm);
   const setCustomTrackSrc = useStore((state) => state.setCustomTrackSrc);
+  const workspaceXml = useStore((state) => state.workspaceXml);
+  const [saveStatus, setSaveStatus] = React.useState('');
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleTrackUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (isPdf) {
       const url = URL.createObjectURL(file);
-      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-      setCustomTrackSrc(url, isPdf ? 'pdf' : 'image');
+      setCustomTrackSrc(url, 'pdf');
       setActiveTrack('upload');
+    } else {
+      // Auto compress large images to WebP to save browser memory
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          // Limit max dimensions to prevent canvas RAM crashes on absurdly large files
+          let width = img.width;
+          let height = img.height;
+          const MAX_SIZE = 4096;
+
+          if (width > MAX_SIZE || height > MAX_SIZE) {
+            const ratio = Math.min(MAX_SIZE / width, MAX_SIZE / height);
+            width = width * ratio;
+            height = height * ratio;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              if (blob) {
+                const webPUrl = URL.createObjectURL(blob);
+                setCustomTrackSrc(webPUrl, 'image');
+                setActiveTrack('upload');
+              }
+            }, 'image/webp', 0.8); // Compress to 80% WebP
+          }
+        };
+        if (event.target?.result) {
+          img.src = event.target.result as string;
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -38,6 +82,14 @@ function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleSave = () => {
+    if (workspaceXml) {
+      localStorage.setItem('blockly_workspace_save', workspaceXml);
+      setSaveStatus('Saved!');
+      setTimeout(() => setSaveStatus(''), 2500);
+    }
   };
 
   return (
@@ -67,11 +119,19 @@ function App() {
             <span>Stop</span>
           </button>
           <button
-            onClick={() => { setSimulationState('idle'); setTimeout(() => setSimulationState('idle'), 100); }}
+            onClick={() => {
+              setSimulationState('idle');
+              window.dispatchEvent(new CustomEvent('reset-simulation'));
+            }}
             className="flex items-center space-x-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md transition-colors text-sm font-medium shadow-sm">
             <RotateCcw className="w-4 h-4" />
           </button>
           <div className="w-px h-6 bg-slate-300 mx-2"></div>
+          {saveStatus && <span className="text-emerald-600 text-xs font-semibold mr-2">{saveStatus}</span>}
+          <button onClick={handleSave} className="flex items-center space-x-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
+            <Save className="w-4 h-4" />
+            <span>Save</span>
+          </button>
           <button onClick={handleDownload} className="flex items-center space-x-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
             <Download className="w-4 h-4" />
             <span>Download .ino</span>

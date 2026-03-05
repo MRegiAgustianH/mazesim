@@ -27,6 +27,16 @@ export const registerBlocks = () => {
             this.setColour(120);
         }
     };
+    Blockly.Blocks['mrb_lc'] = {
+        init: function () {
+            this.appendDummyInput()
+                .appendField("Line Color (lc):")
+                .appendField(new Blockly.FieldDropdown([["Black (0)", "0"], ["White (1)", "1"]]), "COLOR");
+            this.setPreviousStatement(true, null);
+            this.setNextStatement(true, null);
+            this.setColour(120);
+        }
+    };
 
     // ------------------------------------------------------------------
     // Basic Movement

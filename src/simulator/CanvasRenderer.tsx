@@ -27,6 +27,7 @@ export const CanvasRenderer: React.FC = () => {
     const animationRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     const pixelsPerCmRef = useRef<number>(5.33);
+    const startPosRef = useRef({ x: 0, y: 0, angle: 0 });
 
     // Initialize Simulator
     useEffect(() => {
@@ -47,6 +48,7 @@ export const CanvasRenderer: React.FC = () => {
         pixelsPerCmRef.current = pixelsPerCm;
 
         robotRef.current = new Robot(startX, startY, startAngle, pixelsPerCm);
+        startPosRef.current = { x: startX, y: startY, angle: startAngle };
 
         const renderTrack = async () => {
             const trackCanvas = trackCanvasRef.current;
@@ -162,7 +164,7 @@ export const CanvasRenderer: React.FC = () => {
         }
     }, [simulationState, jsCode, activeTrack, setSimulationState]);
 
-    // Clear track listener
+    // Clear and reset listeners
     useEffect(() => {
         const handleClear = () => {
             const trackCanvas = trackCanvasRef.current;
@@ -174,8 +176,29 @@ export const CanvasRenderer: React.FC = () => {
                 }
             }
         };
+
+        const handleReset = () => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const startX = startPosRef.current.x;
+            const startY = startPosRef.current.y;
+            const startAngle = startPosRef.current.angle;
+
+            robotRef.current = new Robot(startX, startY, startAngle, pixelsPerCmRef.current);
+            const trackCanvas = trackCanvasRef.current;
+            if (trackCanvas && trackCanvas.getContext('2d')) {
+                robotRef.current.setContext(trackCanvas.getContext('2d')!);
+            }
+            // Trigger a single frame render to show the reset immediately
+            draw(performance.now());
+        };
+
         window.addEventListener('clear-custom-track', handleClear);
-        return () => window.removeEventListener('clear-custom-track', handleClear);
+        window.addEventListener('reset-simulation', handleReset);
+        return () => {
+            window.removeEventListener('clear-custom-track', handleClear);
+            window.removeEventListener('reset-simulation', handleReset);
+        };
     }, [activeTrack]);
 
     // Mouse handlers for drawing custom tracks
@@ -293,6 +316,10 @@ export const CanvasRenderer: React.FC = () => {
         setIsDrawing(false);
         setIsDraggingRobot(false);
         setIsRotatingRobot(false);
+
+        if (robotRef.current && simulationState === 'idle') {
+            startPosRef.current = { x: robotRef.current.x, y: robotRef.current.y, angle: robotRef.current.angle };
+        }
     };
 
     return (
