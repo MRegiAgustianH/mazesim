@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import * as Blockly from 'blockly/core';
+import * as Blockly from 'blockly';
 import 'blockly/blocks'; // Import default standard blocks
 import { javascriptGenerator } from 'blockly/javascript';
 import { registerBlocks } from './blocks';
@@ -7,6 +7,7 @@ import { arduinoGenerator } from './arduinoGenerator';
 import { setupJsGenerator } from './javascriptGenerator';
 import { useStore } from '../store/useStore';
 import * as En from 'blockly/msg/en';
+import { CrossTabCopyPaste } from '@blockly/plugin-cross-tab-copy-paste';
 
 // Set language
 // @ts-ignore
@@ -58,8 +59,18 @@ export const BlocklyWorkspace: React.FC = () => {
     // Register custom elements
     registerBlocks();
     setupJsGenerator();
-
     let observer: ResizeObserver | null = null;
+
+    // Vite tree-shakes Blockly context menus. We must force-register them.
+    // @ts-ignore
+    if (!Blockly.ContextMenuRegistry.registry.getItem('blockDuplicate')) {
+      // @ts-ignore
+      Blockly.ContextMenuRegistry.registry.register(Blockly.ContextMenuItems.registerDuplicate());
+      // @ts-ignore
+      Blockly.ContextMenuRegistry.registry.register(Blockly.ContextMenuItems.registerComment());
+      // @ts-ignore
+      Blockly.ContextMenuRegistry.registry.register(Blockly.ContextMenuItems.registerDelete());
+    }
 
     if (workspaceRef.current && !blocklyInstance.current) {
       blocklyInstance.current = Blockly.inject(workspaceRef.current, {
@@ -67,7 +78,15 @@ export const BlocklyWorkspace: React.FC = () => {
         grid: { spacing: 20, length: 3, colour: '#ccc', snap: true },
         trashcan: true,
         move: { scrollbars: true, drag: true, wheel: true },
+        zoom: { controls: true, wheel: true },
+        collapse: true,
+        comments: true,
+        disable: true
       });
+
+      // Enable cross tab copy paste (Ctrl+C, Ctrl+V for multiple/separated blocks)
+      const plugin = new CrossTabCopyPaste();
+      plugin.init({ contextMenu: true, shortcut: true }, () => blocklyInstance.current!);
 
       // Force layout recalculations on flex-box/CSS dimension changes
       observer = new ResizeObserver(() => {
