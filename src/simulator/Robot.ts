@@ -442,14 +442,26 @@ export class Robot {
     }
 
     // mengikuti garis sampai sensor yang ditentukan terkena garis kemudian robot maju kedepan selama step
+    // sensor bisa berupa 1 digit (misal 7) atau 2 digit (misal 18 = sensor 1 atau 8)
     async trigger(power: number, sensor: number, step: number) {
         await this.checkStop();
-        const sensorIndex = sensor - 1; // 1 to 8 -> 0 to 7
-        if (sensorIndex < 0 || sensorIndex > 7) return;
+
+        // Parse sensor value: single digit (1-8) or two-digit combo (12 = sensor 1 & 2)
+        const sensorIndices: number[] = [];
+        if (sensor >= 1 && sensor <= 8) {
+            sensorIndices.push(sensor - 1);
+        } else if (sensor >= 10 && sensor <= 88) {
+            const s1 = Math.floor(sensor / 10);
+            const s2 = sensor % 10;
+            if (s1 >= 1 && s1 <= 8) sensorIndices.push(s1 - 1);
+            if (s2 >= 1 && s2 <= 8) sensorIndices.push(s2 - 1);
+        }
+        if (sensorIndices.length === 0) return;
 
         while (this._isSimulationRunning) {
             await this.lineTraceTick(power);
-            if (this.sensors[sensorIndex] === 1) {
+            // Cek apakah SALAH SATU sensor terkena garis
+            if (sensorIndices.some(idx => this.sensors[idx] === 1)) {
                 break;
             }
         }
@@ -502,5 +514,11 @@ export class Robot {
     async putdown(_speed: number, delay: number) {
         await this.checkStop();
         await this.sleep(delay > 0 ? delay : 200);
+    }
+
+    // delay sederhana, menunggu selama ms yang ditentukan
+    async delay(ms: number) {
+        await this.checkStop();
+        await this.sleep(ms);
     }
 }

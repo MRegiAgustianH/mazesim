@@ -61,4 +61,7 @@ export const setupJsGenerator = () => {
 
     javascriptGenerator.forBlock['mrb_putdown'] = (_block: any) =>
         `await sim.putdown(${getNumber(_block, 'SPEED')}, ${getNumber(_block, 'DELAY')});\n`;
+
+    javascriptGenerator.forBlock['mrb_delay'] = (_block: any) =>
+        `await sim.delay(${getNumber(_block, 'DELAY')});\n`;
 };

@@ -99,3 +99,6 @@ arduinoGenerator.forBlock['mrb_pickup'] = (_block: any) =>
 
 arduinoGenerator.forBlock['mrb_putdown'] = (_block: any) =>
   `  my.putdown(${getNumber(_block, 'SPEED')}, ${getNumber(_block, 'DELAY')});\n`;
+
+arduinoGenerator.forBlock['mrb_delay'] = (_block: any) =>
+  `  delay(${getNumber(_block, 'DELAY')});\n`;

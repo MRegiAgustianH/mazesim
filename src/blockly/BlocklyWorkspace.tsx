@@ -43,6 +43,7 @@ const toolboxInfo = {
         { kind: 'block', type: 'mrb_putdown' },
         { kind: 'block', type: 'mrb_blink' },
         { kind: 'block', type: 'mrb_lc' },
+        { kind: 'block', type: 'mrb_delay' },
       ],
     }
   ],

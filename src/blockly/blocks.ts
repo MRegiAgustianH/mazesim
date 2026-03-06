@@ -37,6 +37,16 @@ export const registerBlocks = () => {
             this.setColour(120);
         }
     };
+    Blockly.Blocks['mrb_delay'] = {
+        init: function () {
+            this.appendDummyInput()
+                .appendField("Delay (ms):")
+                .appendField(new Blockly.FieldNumber(500, 0), "DELAY");
+            this.setPreviousStatement(true, null);
+            this.setNextStatement(true, null);
+            this.setColour(120);
+        }
+    };
 
     // ------------------------------------------------------------------
     // Basic Movement
@@ -166,7 +176,7 @@ export const registerBlocks = () => {
                 .appendField("Right Line Sensor (rls) Pwr:")
                 .appendField(new Blockly.FieldNumber(100, 0, 255), "POWER")
                 .appendField(" Sensor:")
-                .appendField(new Blockly.FieldNumber(7, 1, 8), "SENSOR")
+                .appendField(new Blockly.FieldNumber(7, 1, 88), "SENSOR")
                 .appendField(" Step:")
                 .appendField(new Blockly.FieldNumber(100, 1), "STEP");
             this.setPreviousStatement(true, null);
@@ -180,7 +190,7 @@ export const registerBlocks = () => {
                 .appendField("Left Line Sensor (lls) Pwr:")
                 .appendField(new Blockly.FieldNumber(100, 0, 255), "POWER")
                 .appendField(" Sensor:")
-                .appendField(new Blockly.FieldNumber(2, 1, 8), "SENSOR")
+                .appendField(new Blockly.FieldNumber(2, 1, 88), "SENSOR")
                 .appendField(" Step:")
                 .appendField(new Blockly.FieldNumber(100, 1), "STEP");
             this.setPreviousStatement(true, null);
@@ -194,7 +204,7 @@ export const registerBlocks = () => {
                 .appendField("Right Line Delay (rld) Pwr:")
                 .appendField(new Blockly.FieldNumber(100, 0, 255), "POWER")
                 .appendField(" Sensor:")
-                .appendField(new Blockly.FieldNumber(7, 1, 8), "SENSOR")
+                .appendField(new Blockly.FieldNumber(7, 1, 88), "SENSOR")
                 .appendField(" Step:")
                 .appendField(new Blockly.FieldNumber(100, 1), "STEP")
                 .appendField(" Dly:")
@@ -210,7 +220,7 @@ export const registerBlocks = () => {
                 .appendField("Left Line Delay (lld) Pwr:")
                 .appendField(new Blockly.FieldNumber(100, 0, 255), "POWER")
                 .appendField(" Sensor:")
-                .appendField(new Blockly.FieldNumber(2, 1, 8), "SENSOR")
+                .appendField(new Blockly.FieldNumber(2, 1, 88), "SENSOR")
                 .appendField(" Step:")
                 .appendField(new Blockly.FieldNumber(100, 1), "STEP")
                 .appendField(" Dly:")
@@ -229,7 +239,7 @@ export const registerBlocks = () => {
                 .appendField("Trigger Pwr:")
                 .appendField(new Blockly.FieldNumber(100, 0, 255), "POWER")
                 .appendField(" Sensor:")
-                .appendField(new Blockly.FieldNumber(1, 1, 8), "SENSOR")
+                .appendField(new Blockly.FieldNumber(1, 1, 88), "SENSOR")
                 .appendField(" Step:")
                 .appendField(new Blockly.FieldNumber(100, 1), "STEP");
             this.setPreviousStatement(true, null);
