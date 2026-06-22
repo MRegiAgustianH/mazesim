@@ -1,11 +1,13 @@
 import React from 'react';
-import { Download, Play, Square, RotateCcw, Save } from 'lucide-react';
+import { Download, Play, Square, RotateCcw, Save, Brain, Blocks } from 'lucide-react';
 import { BlocklyWorkspace } from './blockly/BlocklyWorkspace';
-import { CanvasRenderer } from './simulator/CanvasRenderer';
+import { CanvasRenderer, type CanvasRendererHandle } from './simulator/CanvasRenderer';
+import { TrainingPanel } from './qlearning/TrainingPanel';
 import { useStore } from './store/useStore';
 
 function App() {
   const arduinoCode = useStore((state) => state.arduinoCode);
+  const setArduinoCode = useStore((state) => state.setArduinoCode);
   const simulationState = useStore((state) => state.simulationState);
   const setSimulationState = useStore((state) => state.setSimulationState);
   const activeTrack = useStore((state) => state.activeTrack);
@@ -16,9 +18,27 @@ function App() {
   const setActiveTrackHeightCm = useStore((state) => state.setActiveTrackHeightCm);
   const setCustomTrackSrc = useStore((state) => state.setCustomTrackSrc);
   const workspaceXml = useStore((state) => state.workspaceXml);
+  const editorMode = useStore((state) => state.editorMode);
+  const setEditorMode = useStore((state) => state.setEditorMode);
   const [saveStatus, setSaveStatus] = React.useState('');
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const canvasRendererRef = React.useRef<CanvasRendererHandle>(null);
+
+  // Create stable refs that TrainingPanel can use
+  const trackCanvasProxyRef = React.useRef<HTMLCanvasElement | null>(null);
+  const robotProxyRef = React.useRef<any>(null);
+
+  // Sync proxy refs when canvas renderer updates
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      if (canvasRendererRef.current) {
+        trackCanvasProxyRef.current = canvasRendererRef.current.getTrackCanvas();
+        robotProxyRef.current = canvasRendererRef.current.getRobot();
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleTrackUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -31,7 +51,6 @@ function App() {
       setCustomTrackSrc(url, 'pdf');
       setActiveTrack('upload');
     } else {
-      // Auto compress large images to WebP to save browser memory
       const reader = new FileReader();
       reader.onload = (event) => {
         const img = new Image();
@@ -39,7 +58,6 @@ function App() {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
 
-          // Limit max dimensions to prevent canvas RAM crashes on absurdly large files
           let width = img.width;
           let height = img.height;
           const MAX_SIZE = 4096;
@@ -61,7 +79,7 @@ function App() {
                 setCustomTrackSrc(webPUrl, 'image');
                 setActiveTrack('upload');
               }
-            }, 'image/webp', 0.8); // Compress to 80% WebP
+            }, 'image/webp', 0.8);
           }
         };
         if (event.target?.result) {
@@ -90,6 +108,10 @@ function App() {
       setSaveStatus('Saved!');
       setTimeout(() => setSaveStatus(''), 2500);
     }
+  };
+
+  const handleAiGenerateIno = (code: string) => {
+    setArduinoCode(code);
   };
 
   return (
@@ -141,18 +163,52 @@ function App() {
 
       {/* Main Content Area - Split Screen */}
       <main className="flex-1 flex flex-row h-[calc(100vh-65px)] w-full relative">
-        {/* Left Panel - Blockly Workspace */}
-        <section className="w-1/2 h-full border-r border-slate-300 bg-white flex flex-col relative z-10 w-[50%]">
+        {/* Left Panel - Editor (Blockly or AI Training) */}
+        <section className="w-1/2 h-full border-r border-slate-300 bg-white flex flex-col relative z-10">
+          {/* Tab Header */}
           <div className="absolute top-0 left-0 right-0 p-2 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10">
-            <span>PROGRAM LOGIC</span>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => setEditorMode('blockly')}
+                className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  editorMode === 'blockly'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                }`}
+              >
+                <Blocks className="w-3 h-3" />
+                <span>Blockly</span>
+              </button>
+              <button
+                onClick={() => setEditorMode('ai')}
+                className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  editorMode === 'ai'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                }`}
+              >
+                <Brain className="w-3 h-3" />
+                <span>AI Training</span>
+              </button>
+            </div>
           </div>
-          <div className="absolute top-10 bottom-0 left-0 right-0 w-full overflow-hidden" id="blocklyDiv">
-            <BlocklyWorkspace />
+          {/* Editor Content - Both panels stay mounted, toggle via CSS */}
+          <div className="absolute top-10 bottom-0 left-0 right-0 w-full overflow-hidden">
+            <div id="blocklyDiv" style={{ display: editorMode === 'blockly' ? 'block' : 'none', width: '100%', height: '100%' }}>
+              <BlocklyWorkspace />
+            </div>
+            <div style={{ display: editorMode === 'ai' ? 'block' : 'none', width: '100%', height: '100%' }}>
+              <TrainingPanel
+                trackCanvasRef={trackCanvasProxyRef}
+                robotRef={robotProxyRef}
+                onGenerateIno={handleAiGenerateIno}
+              />
+            </div>
           </div>
         </section>
 
         {/* Right Panel - Simulator UI */}
-        <section className="w-1/2 h-full bg-slate-200 flex flex-col relative z-10 w-[50%]">
+        <section className="w-1/2 h-full bg-slate-200 flex flex-col relative z-10">
           <div className="absolute top-0 left-0 right-0 p-2 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10">
             <span>SIMULATOR</span>
             <div className="flex space-x-2">
@@ -211,7 +267,7 @@ function App() {
           <div className="absolute top-10 bottom-0 left-0 right-0 p-8 flex items-center justify-center bg-slate-200">
             {/* Canvas */}
             <div className="w-full h-full max-h-[800px] aspect-square bg-white shadow-md rounded-lg flex items-center justify-center border border-slate-300 relative overflow-hidden mx-auto">
-              <CanvasRenderer />
+              <CanvasRenderer ref={canvasRendererRef} />
             </div>
           </div>
         </section>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { useStore } from '../store/useStore';
 import { Robot } from './Robot';
 import { drawTrack } from './TrackPreset';
@@ -7,7 +7,12 @@ import * as pdfjsLib from 'pdfjs-dist';
 // Configure the worker for PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-export const CanvasRenderer: React.FC = () => {
+export interface CanvasRendererHandle {
+    getTrackCanvas: () => HTMLCanvasElement | null;
+    getRobot: () => Robot | null;
+}
+
+export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const trackCanvasRef = useRef<HTMLCanvasElement>(null); // Offscreen canvas for track reading
 
@@ -19,6 +24,17 @@ export const CanvasRenderer: React.FC = () => {
     const activeTrackWidthCm = useStore(state => state.activeTrackWidthCm);
     const activeTrackHeightCm = useStore(state => state.activeTrackHeightCm);
     const setSimulationState = useStore(state => state.setSimulationState);
+    // Subscribe to trigger re-renders (draw loop reads via getState())
+    const _startPoint = useStore(state => state.startPoint);
+    const _finishPoint = useStore(state => state.finishPoint);
+    const _waypoints = useStore(state => state.waypoints);
+    const _collectedIds = useStore(state => state.collectedWaypointIds);
+    void _startPoint; void _finishPoint; void _waypoints; void _collectedIds;
+    const placementMode = useStore(state => state.placementMode);
+    const setStartPoint = useStore(state => state.setStartPoint);
+    const setFinishPoint = useStore(state => state.setFinishPoint);
+    const addWaypoint = useStore(state => state.addWaypoint);
+    const setPlacementMode = useStore(state => state.setPlacementMode);
 
     const [isDrawing, setIsDrawing] = useState(false);
     const [isDraggingRobot, setIsDraggingRobot] = useState(false);
@@ -28,6 +44,12 @@ export const CanvasRenderer: React.FC = () => {
     const lastTimeRef = useRef<number>(0);
     const pixelsPerCmRef = useRef<number>(5.33);
     const startPosRef = useRef({ x: 0, y: 0, angle: 0 });
+
+    // Expose refs to parent via imperative handle
+    useImperativeHandle(ref, () => ({
+        getTrackCanvas: () => trackCanvasRef.current,
+        getRobot: () => robotRef.current,
+    }));
 
     // Initialize Simulator
     useEffect(() => {
@@ -134,6 +156,121 @@ export const CanvasRenderer: React.FC = () => {
         // Update and draw robot
         robotRef.current.update(Math.min(dt, 0.1)); // cap dt to prevent huge jumps
         robotRef.current.draw(ctx);
+
+        // Draw Start Point marker (green flag)
+        const sp = useStore.getState().startPoint;
+        if (sp) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, 12, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.3)';
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#16a34a';
+            ctx.stroke();
+            // Flag pole
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y + 12);
+            ctx.lineTo(sp.x, sp.y - 20);
+            ctx.strokeStyle = '#16a34a';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            // Flag triangle
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y - 20);
+            ctx.lineTo(sp.x + 14, sp.y - 14);
+            ctx.lineTo(sp.x, sp.y - 8);
+            ctx.closePath();
+            ctx.fillStyle = '#22c55e';
+            ctx.fill();
+            // Label
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillStyle = '#16a34a';
+            ctx.textAlign = 'center';
+            ctx.fillText('START', sp.x, sp.y + 26);
+            ctx.restore();
+        }
+
+        // Draw Finish Point marker (red flag)
+        const fp = useStore.getState().finishPoint;
+        if (fp) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(fp.x, fp.y, 12, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#dc2626';
+            ctx.stroke();
+            // Flag pole
+            ctx.beginPath();
+            ctx.moveTo(fp.x, fp.y + 12);
+            ctx.lineTo(fp.x, fp.y - 20);
+            ctx.strokeStyle = '#dc2626';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            // Checkered flag
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(fp.x, fp.y - 20, 14, 6);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(fp.x, fp.y - 14, 14, 6);
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(fp.x + 7, fp.y - 20, 7, 6);
+            ctx.strokeStyle = '#dc2626';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(fp.x, fp.y - 20, 14, 12);
+            // Label
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillStyle = '#dc2626';
+            ctx.textAlign = 'center';
+            ctx.fillText('FINISH', fp.x, fp.y + 26);
+            ctx.restore();
+        }
+
+        // Draw Waypoint markers (amber = uncollected, green = collected)
+        const wps = useStore.getState().waypoints;
+        const collectedIds = useStore.getState().collectedWaypointIds;
+        wps.forEach((wp, i) => {
+            const isCollected = collectedIds.includes(i);
+            ctx.save();
+            // Outer circle
+            ctx.beginPath();
+            ctx.arc(wp.x, wp.y, 14, 0, Math.PI * 2);
+            ctx.fillStyle = isCollected ? 'rgba(34, 197, 94, 0.25)' : 'rgba(245, 158, 11, 0.25)';
+            ctx.fill();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = isCollected ? '#22c55e' : '#f59e0b';
+            ctx.stroke();
+            // Inner circle
+            ctx.beginPath();
+            ctx.arc(wp.x, wp.y, 8, 0, Math.PI * 2);
+            ctx.fillStyle = isCollected ? '#22c55e' : '#f59e0b';
+            ctx.fill();
+            // Number or checkmark
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillStyle = isCollected ? '#fff' : '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(isCollected ? '✓' : `${i + 1}`, wp.x, wp.y);
+            // Label
+            ctx.font = 'bold 9px sans-serif';
+            ctx.fillStyle = isCollected ? '#22c55e' : '#f59e0b';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText(`P${i + 1}`, wp.x, wp.y + 26);
+            ctx.restore();
+        });
+
+        // Draw placement mode indicator
+        const pm = useStore.getState().placementMode;
+        if (pm !== 'none') {
+            ctx.save();
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            const colors: Record<string, string> = { start: '#22c55e', finish: '#ef4444', waypoint: '#f59e0b' };
+            ctx.fillStyle = colors[pm] || '#fff';
+            ctx.fillText(`Click to place ${pm.toUpperCase()} point`, 400, 30);
+            ctx.restore();
+        }
 
         animationRef.current = requestAnimationFrame(draw);
     };
@@ -250,6 +387,28 @@ export const CanvasRenderer: React.FC = () => {
 
         const { x, y } = getMousePos(e);
 
+        // Check if we're in placement mode (setting start/finish/waypoint)
+        const currentPlacementMode = useStore.getState().placementMode;
+        if (currentPlacementMode !== 'none') {
+            if (currentPlacementMode === 'start') {
+                setStartPoint({ x, y });
+                if (robotRef.current) {
+                    robotRef.current.x = x;
+                    robotRef.current.y = y;
+                    startPosRef.current = { x, y, angle: robotRef.current.angle };
+                }
+                setPlacementMode('none');
+            } else if (currentPlacementMode === 'finish') {
+                setFinishPoint({ x, y });
+                setPlacementMode('none');
+            } else if (currentPlacementMode === 'waypoint') {
+                addWaypoint({ x, y });
+                // Stay in waypoint mode for placing multiple points!
+                // User clicks "Add Waypoint" button again to exit mode
+            }
+            return;
+        }
+
         // Check if user is clicking on the robot
         if (robotRef.current) {
             const rx = robotRef.current.x;
@@ -337,8 +496,9 @@ export const CanvasRenderer: React.FC = () => {
                 className={`w-full h-full object-contain bg-white 
                     ${isDraggingRobot ? 'cursor-grabbing' : ''}
                     ${isRotatingRobot ? 'cursor-alias' : ''}
-                    ${!isDraggingRobot && !isRotatingRobot && activeTrack === 'custom' && simulationState === 'idle' ? 'cursor-crosshair' : ''}
-                    ${!isDraggingRobot && !isRotatingRobot && activeTrack !== 'custom' && simulationState === 'idle' ? 'cursor-grab' : ''}
+                    ${placementMode !== 'none' ? 'cursor-crosshair' : ''}
+                    ${placementMode === 'none' && !isDraggingRobot && !isRotatingRobot && activeTrack === 'custom' && simulationState === 'idle' ? 'cursor-crosshair' : ''}
+                    ${placementMode === 'none' && !isDraggingRobot && !isRotatingRobot && activeTrack !== 'custom' && simulationState === 'idle' ? 'cursor-grab' : ''}
                     ${simulationState === 'running' ? 'cursor-default' : ''}
                 `}
                 onContextMenu={(e) => { e.preventDefault(); }} // prevent default right-click menu
@@ -352,4 +512,4 @@ export const CanvasRenderer: React.FC = () => {
             />
         </>
     );
-};
+});

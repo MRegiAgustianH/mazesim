@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+interface Point { x: number; y: number; }
+
 interface AppState {
     arduinoCode: string;
     jsCode: string;
@@ -10,6 +12,12 @@ interface AppState {
     customTrackType: 'image' | 'pdf' | null;
     activeTrackWidthCm: number;
     activeTrackHeightCm: number;
+    editorMode: 'blockly' | 'ai';
+    startPoint: Point | null;
+    finishPoint: Point | null;
+    waypoints: Point[];
+    collectedWaypointIds: number[];  // indices of collected waypoints for visual
+    placementMode: 'none' | 'start' | 'finish' | 'waypoint';
 
     setArduinoCode: (code: string) => void;
     setJsCode: (code: string) => void;
@@ -19,6 +27,14 @@ interface AppState {
     setCustomTrackSrc: (src: string | null, type?: 'image' | 'pdf') => void;
     setActiveTrackWidthCm: (cm: number) => void;
     setActiveTrackHeightCm: (cm: number) => void;
+    setEditorMode: (mode: 'blockly' | 'ai') => void;
+    setStartPoint: (point: Point | null) => void;
+    setFinishPoint: (point: Point | null) => void;
+    setWaypoints: (points: Point[]) => void;
+    addWaypoint: (point: Point) => void;
+    removeWaypoint: (index: number) => void;
+    setCollectedWaypointIds: (ids: number[]) => void;
+    setPlacementMode: (mode: 'none' | 'start' | 'finish' | 'waypoint') => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -29,8 +45,14 @@ export const useStore = create<AppState>((set) => ({
     activeTrack: 'loop',
     customTrackSrc: null,
     customTrackType: null,
-    activeTrackWidthCm: 150, // Default 1.5m
-    activeTrackHeightCm: 150, // Default 1.5m
+    activeTrackWidthCm: 150,
+    activeTrackHeightCm: 150,
+    editorMode: 'blockly',
+    startPoint: null,
+    finishPoint: null,
+    waypoints: [],
+    collectedWaypointIds: [],
+    placementMode: 'none',
 
     setArduinoCode: (code) => set({ arduinoCode: code }),
     setJsCode: (code) => set({ jsCode: code }),
@@ -40,4 +62,12 @@ export const useStore = create<AppState>((set) => ({
     setCustomTrackSrc: (src, type) => set({ customTrackSrc: src, customTrackType: type || null }),
     setActiveTrackWidthCm: (cm) => set({ activeTrackWidthCm: cm }),
     setActiveTrackHeightCm: (cm) => set({ activeTrackHeightCm: cm }),
+    setEditorMode: (mode) => set({ editorMode: mode }),
+    setStartPoint: (point) => set({ startPoint: point }),
+    setFinishPoint: (point) => set({ finishPoint: point }),
+    setWaypoints: (points) => set({ waypoints: points }),
+    addWaypoint: (point) => set((state) => ({ waypoints: [...state.waypoints, point] })),
+    removeWaypoint: (index) => set((state) => ({ waypoints: state.waypoints.filter((_, i) => i !== index) })),
+    setCollectedWaypointIds: (ids) => set({ collectedWaypointIds: ids }),
+    setPlacementMode: (mode) => set({ placementMode: mode }),
 }));
