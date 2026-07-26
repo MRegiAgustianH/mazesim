@@ -117,25 +117,39 @@ export class QLearningAgent {
       return Math.floor(Math.random() * NUM_ACTIONS);
     }
 
-    // Exploit strategi 1: REPLAY best episode berdasarkan urutan langkah
-    // Jika best episode punya aksi di step ini, ikuti urutannya
+    // Exploit: Prioritaskan Q-Table jika state ini sudah pernah dipelajari (tidak semua bernilai 0)
+    const qValues = this.qTable[state];
+    const hasLearned = qValues && qValues.some(v => v !== 0);
+
+    if (hasLearned) {
+      // 90% jalankan aksi terbaik dari Q-Table untuk optimasi jalur terpendek
+      if (Math.random() < 0.90) {
+        let bestAction = 0;
+        let bestValue = qValues[0];
+        for (let i = 1; i < NUM_ACTIONS; i++) {
+          if (qValues[i] > bestValue) {
+            bestValue = qValues[i];
+            bestAction = i;
+          }
+        }
+        return bestAction;
+      }
+    }
+
+    // Fallback 1: Jika Q-Table kosong atau 10% deviasi, gunakan urutan best episode jika tersedia
     if (this.hasReachedFinish && stepIndex < this.bestActions.length) {
-      // 85% ikuti urutan best episode, 15% coba optimize
-      if (Math.random() < 0.85) {
+      if (Math.random() < 0.50) {
         return this.bestActions[stepIndex].actionId;
       }
     }
 
-    // Exploit strategi 2: cek bestActionMap berdasarkan state
+    // Fallback 2: Cek bestActionMap berdasarkan state
     const bestKnown = this.bestActionMap[state];
     if (bestKnown !== undefined && this.hasReachedFinish) {
-      if (Math.random() < 0.7) {
-        return bestKnown;
-      }
+      return bestKnown;
     }
 
-    // Exploit strategi 3: Q-table
-    const qValues = this.qTable[state];
+    // Fallback 3: Kembalikan nilai terbaik dari Q-Table yang ada
     let bestAction = 0;
     let bestValue = qValues[0];
     for (let i = 1; i < NUM_ACTIONS; i++) {
@@ -395,6 +409,7 @@ export class QLearningAgent {
    * Jalankan aksi pada robot simulator (tanpa lineTrace)
    */
   private async executeAction(robot: Robot, actionId: number): Promise<void> {
+    robot.actionTicks = 0; // Reset tick counter for this action step to prevent infinite loop
     const power = this.config.power;
     const step = 100;
     switch (actionId) {

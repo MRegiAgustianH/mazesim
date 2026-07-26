@@ -23,6 +23,14 @@ export class Robot {
 
     _isSimulationRunning: boolean = false;
     _tickResolve: (() => void) | null = null;
+    fastMode: boolean = false;
+    simTime: number = 0;
+    actionTicks: number = 0;
+    simTime: number = 0;
+
+    getNow(): number {
+        return this.fastMode ? this.simTime : Date.now();
+    }
 
     constructor(startX: number, startY: number, startAngle: number, pixelsPerCm: number = 5.33) {
         this.x = startX;
@@ -65,6 +73,10 @@ export class Robot {
         this.x += v * Math.cos(this.angle) * dt;
         this.y += v * Math.sin(this.angle) * dt;
         this.angle += omega * dt;
+
+        if (this.fastMode) {
+            this.simTime += dt * 1000;
+        }
 
         if (this._tickResolve) {
             this._tickResolve();
@@ -248,10 +260,28 @@ export class Robot {
     }
 
     sleep(ms: number): Promise<void> {
+        if (this.fastMode) {
+            const step = 16;
+            let remaining = ms;
+            while (remaining > 0 && this._isSimulationRunning) {
+                const dt = Math.min(remaining, step);
+                this.update(dt / 1000);
+                remaining -= step;
+            }
+            return Promise.resolve();
+        }
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     waitForTick(): Promise<void> {
+        this.actionTicks++;
+        if (this.actionTicks > 1500) {
+            throw new Error("Action timeout: Robot stuck in loop");
+        }
+        if (this.fastMode) {
+            this.update(0.016);
+            return Promise.resolve();
+        }
         return new Promise(resolve => {
             this._tickResolve = resolve;
         });
@@ -407,8 +437,8 @@ export class Robot {
     // (line delay) mengikuti garis selama waktu yang ditentukan
     async ld(power: number, delay: number) {
         await this.checkStop();
-        const startTime = Date.now();
-        while (this._isSimulationRunning && Date.now() - startTime < delay) {
+        const startTime = this.getNow();
+        while (this._isSimulationRunning && this.getNow() - startTime < delay) {
             await this.lineTraceTick(power);
         }
         this.lSpeed = 0;

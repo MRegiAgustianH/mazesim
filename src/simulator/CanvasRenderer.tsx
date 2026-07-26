@@ -154,8 +154,14 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         ctx.drawImage(trackCanvas, 0, 0);
 
         // Update and draw robot
-        robotRef.current.update(Math.min(dt, 0.1)); // cap dt to prevent huge jumps
-        robotRef.current.draw(ctx);
+        if (robotRef.current.fastMode) {
+            // In fast training mode, do not run standard updates in game loop
+            // to avoid conflicts with background calculations. We just draw the robot's current position.
+            robotRef.current.draw(ctx);
+        } else {
+            robotRef.current.update(Math.min(dt, 0.1)); // cap dt to prevent huge jumps
+            robotRef.current.draw(ctx);
+        }
 
         // Draw Start Point marker (green flag)
         const sp = useStore.getState().startPoint;

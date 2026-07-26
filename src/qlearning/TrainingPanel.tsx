@@ -14,6 +14,7 @@ interface TrainingPanelProps {
 export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, robotRef, onGenerateIno }) => {
   const agentRef = useRef<QLearningAgent>(new QLearningAgent());
   const [isTraining, setIsTraining] = useState(false);
+  const [isFastMode, setIsFastMode] = useState(true);
   const [actionCounts, setActionCounts] = useState<string[]>([]);
   const [allStats, setAllStats] = useState<TrainingStats[]>([]);
   const [intersections, setIntersections] = useState<Intersection[]>([]);
@@ -51,44 +52,58 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
   const startTraining = useCallback(async () => {
     const robot = robotRef.current;
     if (!robot) { setStatusMsg('Error: Robot not initialized'); return; }
-    if (!startPoint) { setStatusMsg('⚠️ Set START point first!'); return; }
-    if (!finishPoint) { setStatusMsg('⚠️ Set FINISH point first!'); return; }
+    if (!startPoint) { setStatusMsg('?? Set START point first!'); return; }
+    if (!finishPoint) { setStatusMsg('?? Set FINISH point first!'); return; }
 
     startPosRef.current = { x: robot.x, y: robot.y, angle: robot.angle };
 
     const agent = agentRef.current;
     agent.config = { ...config };
     agent.isTraining = true;
+    robot.fastMode = isFastMode;
 
-    // Setup waypoint collection callback for real-time visual feedback
-    agent.onWaypointCollected = (idx: number) => {
-      setCollectedWaypointIds(
-        Array.from(new Set([...useStore.getState().collectedWaypointIds, idx]))
-      );
-    };
-
-    // Setup action counter callback — real-time sequential list
     const episodeActions: string[] = [];
-    agent.onActionExecuted = (actionName: string) => {
-      episodeActions.push(actionName);
-      setActionCounts([...episodeActions]);
-    };
+
+    if (isFastMode) {
+      // In fast mode, disable real-time callbacks to save React overhead
+      agent.onWaypointCollected = undefined;
+      agent.onActionExecuted = undefined;
+    } else {
+      // Setup waypoint collection callback for real-time visual feedback
+      agent.onWaypointCollected = (idx: number) => {
+        setCollectedWaypointIds(
+          Array.from(new Set([...useStore.getState().collectedWaypointIds, idx]))
+        );
+      };
+
+      // Setup action counter callback ? real-time sequential list
+      agent.onActionExecuted = (actionName: string) => {
+        episodeActions.push(actionName);
+        setActionCounts([...episodeActions]);
+      };
+    }
 
     setIsTraining(true);
-    setStatusMsg(`Training started... Route: Start → ${waypoints.length} waypoints → Finish`);
+    setStatusMsg(`Training started... Route: Start ? ${waypoints.length} waypoints ? Finish`);
 
     robot._isSimulationRunning = true;
 
-    // Delay 500ms agar posisi robot awal terlihat di canvas
-    await new Promise(r => setTimeout(r, 500));
+    // Delay 500ms agar posisi robot awal terlihat di canvas (hanya jika lambat)
+    if (!isFastMode) {
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    const tempStats: TrainingStats[] = [];
 
     for (let ep = 0; ep < config.maxEpisodes; ep++) {
       if (!agent.isTraining) break;
 
-      // Reset collected waypoints & action list at start of each episode
-      setCollectedWaypointIds([]);
-      episodeActions.length = 0;
-      setActionCounts([]);
+      if (!isFastMode) {
+        // Reset collected waypoints & action list at start of each episode
+        setCollectedWaypointIds([]);
+        episodeActions.length = 0;
+        setActionCounts([]);
+      }
 
       // Reset robot ke start point
       robot.x = startPoint.x;
@@ -96,36 +111,58 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
       if (startPosRef.current) robot.angle = startPosRef.current.angle;
       robot.lSpeed = 0;
       robot.rSpeed = 0;
+      robot.simTime = 0; // Reset simulated clock
 
       try {
         const stats = await agent.runEpisode(robot, ep + 1, waypoints, finishPoint);
-        setAllStats(prev => [...prev, stats]);
+        tempStats.push(stats);
 
-        const wpInfo = waypoints.length > 0 ? ` | WP: ${stats.waypointsCollected}/${waypoints.length + 1}` : '';
-        setStatusMsg(
-          `Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ε: ${stats.epsilon.toFixed(3)}${stats.finished ? ' ✅ FINISH!' : ''}`
-        );
+        // Update UI occasionally in fast mode to keep the browser responsive
+        if (isFastMode) {
+          if (ep % 20 === 0 || ep === config.maxEpisodes - 1) {
+            setAllStats([...tempStats]);
+            const wpInfo = waypoints.length > 0 ? ` | WP: ${stats.waypointsCollected}/${waypoints.length + 1}` : '';
+            setStatusMsg(
+              `Training: Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ?: ${stats.epsilon.toFixed(3)}${stats.finished ? ' ? FINISH!' : ''}`
+            );
+            // Yield control to the browser to prevent freezing and show progress
+            await new Promise(r => setTimeout(r, 0));
+          }
+        } else {
+          setAllStats(prev => [...prev, stats]);
+          const wpInfo = waypoints.length > 0 ? ` | WP: ${stats.waypointsCollected}/${waypoints.length + 1}` : '';
+          setStatusMsg(
+            `Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ?: ${stats.epsilon.toFixed(3)}${stats.finished ? ' ? FINISH!' : ''}`
+          );
+        }
       } catch (e) {
         console.log('Training episode error:', e);
       }
 
-      await new Promise(r => setTimeout(r, 10));
+      if (!isFastMode) {
+        await new Promise(r => setTimeout(r, 10));
+      }
     }
 
     robot._isSimulationRunning = false;
     robot.lSpeed = 0;
     robot.rSpeed = 0;
+    robot.fastMode = false; // Reset to normal mode
     agent.isTraining = false;
     agent.onWaypointCollected = undefined;
     agent.onActionExecuted = undefined;
     setIsTraining(false);
     setCollectedWaypointIds([]); // Reset visual
 
+    if (isFastMode) {
+      setAllStats(tempStats);
+    }
+
     const finishedCount = agent.stats.filter(s => s.finished).length;
     setStatusMsg(
       `Training complete! ${agent.stats.length} episodes, ${finishedCount} reached finish. Best reward: ${agent.bestReward.toFixed(0)}`
     );
-  }, [robotRef, config, startPoint, finishPoint, waypoints, setCollectedWaypointIds]);
+  }, [robotRef, config, startPoint, finishPoint, waypoints, setCollectedWaypointIds, isFastMode]);
 
   // Stop training
   const stopTraining = useCallback(() => {
@@ -264,6 +301,18 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
 
       {/* Control Buttons */}
       <div className="px-4 py-3 space-y-2 border-b border-slate-700">
+        {/* Fast Training Checkbox */}
+        <label className="flex items-center space-x-2 py-1 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={isFastMode}
+            onChange={(e) => setIsFastMode(e.target.checked)}
+            disabled={isTraining}
+            className="rounded border-slate-600 bg-slate-800 text-purple-500 focus:ring-purple-500"
+          />
+          <span className="text-xs text-slate-300">Fast Training (Background)</span>
+        </label>
+
         <div className="flex space-x-2">
           <button
             onClick={analyzeTrack}
