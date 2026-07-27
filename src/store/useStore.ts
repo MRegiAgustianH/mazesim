@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ActionRecord } from '../qlearning/QLearningAgent';
 
 interface Point { x: number; y: number; }
 
@@ -18,6 +19,9 @@ interface AppState {
     waypoints: Point[];
     collectedWaypointIds: number[];  // indices of collected waypoints for visual
     placementMode: 'none' | 'start' | 'finish' | 'waypoint';
+    bestActions: ActionRecord[];
+    trainingPower: number;
+    trainingSummary: { episodes: number; finished: number; bestReward: number; qTableSize: number } | null;
 
     setArduinoCode: (code: string) => void;
     setJsCode: (code: string) => void;
@@ -35,6 +39,9 @@ interface AppState {
     removeWaypoint: (index: number) => void;
     setCollectedWaypointIds: (ids: number[]) => void;
     setPlacementMode: (mode: 'none' | 'start' | 'finish' | 'waypoint') => void;
+    setBestActions: (actions: ActionRecord[]) => void;
+    setTrainingPower: (power: number) => void;
+    setTrainingSummary: (summary: { episodes: number; finished: number; bestReward: number; qTableSize: number } | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -53,6 +60,9 @@ export const useStore = create<AppState>((set) => ({
     waypoints: [],
     collectedWaypointIds: [],
     placementMode: 'none',
+    bestActions: [],
+    trainingPower: 100,
+    trainingSummary: null,
 
     setArduinoCode: (code) => set({ arduinoCode: code }),
     setJsCode: (code) => set({ jsCode: code }),
@@ -70,4 +80,7 @@ export const useStore = create<AppState>((set) => ({
     removeWaypoint: (index) => set((state) => ({ waypoints: state.waypoints.filter((_, i) => i !== index) })),
     setCollectedWaypointIds: (ids) => set({ collectedWaypointIds: ids }),
     setPlacementMode: (mode) => set({ placementMode: mode }),
+    setBestActions: (actions) => set({ bestActions: actions }),
+    setTrainingPower: (power) => set({ trainingPower: power }),
+    setTrainingSummary: (summary) => set({ trainingSummary: summary }),
 }));

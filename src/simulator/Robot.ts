@@ -26,6 +26,7 @@ export class Robot {
     fastMode: boolean = false;
     simTime: number = 0;
     actionTicks: number = 0;
+    actionTimedOut: boolean = false;
     simTime: number = 0;
 
     getNow(): number {
@@ -276,7 +277,9 @@ export class Robot {
     waitForTick(): Promise<void> {
         this.actionTicks++;
         if (this.actionTicks > 1500) {
-            throw new Error("Action timeout: Robot stuck in loop");
+            // ponytail: graceful timeout (flag, bukan throw) supaya episode tetap dapat Q-update
+            this.actionTimedOut = true;
+            return Promise.resolve();
         }
         if (this.fastMode) {
             this.update(0.016);
@@ -319,7 +322,7 @@ export class Robot {
     // Simulated turn right exactly like docx module
     async tright(power: number) {
         // 1. Putar kanan, tunggu sampai sensor tengah lepas garis agar tidak double trigger
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             this.readSensors();
             this.lSpeed = power;
             this.rSpeed = -power;
@@ -329,7 +332,7 @@ export class Robot {
         }
 
         // 2. Putar kanan, sampai sensor tengah terkena garis
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             this.readSensors();
             this.lSpeed = power;
             this.rSpeed = -power;
@@ -345,7 +348,7 @@ export class Robot {
     // Simulated turn left exactly like docx module
     async tleft(power: number) {
         // 1. Putar kiri, tunggu sampai sensor tengah lepas garis
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             this.readSensors();
             this.lSpeed = -power;
             this.rSpeed = power;
@@ -355,7 +358,7 @@ export class Robot {
         }
 
         // 2. Putar kiri, sampai sensor tengah terkena garis
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             this.readSensors();
             this.lSpeed = -power;
             this.rSpeed = power;
@@ -371,7 +374,7 @@ export class Robot {
     // (right line) robot mengikuti garis sampai sensor 8 terkena garis, kemudian robot maju kedepan selama step, dan berputar ke kanan
     async rl(power: number, step: number) {
         await this.checkStop();
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             await this.lineTraceTick(power);
             // Sensor 8 = index 7
             if (this.sensors[7] === 1) {
@@ -385,7 +388,7 @@ export class Robot {
     // (left line) robot mengikuti garis sampai sensor 1 terkena garis, kemudian robot maju kedepan selama step, dan berputar ke kiri
     async ll(power: number, step: number) {
         await this.checkStop();
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             await this.lineTraceTick(power);
             // Sensor 1 = index 0
             if (this.sensors[0] === 1) {
@@ -397,7 +400,7 @@ export class Robot {
     }
 
     async lineTrace(power: number) {
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             await this.lineTraceTick(power);
             // Check for intersection: if all sensors are black (or something similar depending on need)
             const activeSensors = this.sensors.reduce((a, b) => a + b, 0);
@@ -438,7 +441,7 @@ export class Robot {
     async ld(power: number, delay: number) {
         await this.checkStop();
         const startTime = this.getNow();
-        while (this._isSimulationRunning && this.getNow() - startTime < delay) {
+        while (this._isSimulationRunning && !this.actionTimedOut && this.getNow() - startTime < delay) {
             await this.lineTraceTick(power);
         }
         this.lSpeed = 0;
@@ -450,7 +453,7 @@ export class Robot {
     // (past right line) robot mengikuti garis sampai sensor 8 terkena garis, maju selama step
     async prl(power: number, step: number) {
         await this.checkStop();
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             await this.lineTraceTick(power);
             if (this.sensors[7] === 1) {
                 break;
@@ -462,7 +465,7 @@ export class Robot {
     // (past left line) robot mengikuti garis sampai sensor 1 terkena garis, maju selama step
     async pll(power: number, step: number) {
         await this.checkStop();
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             await this.lineTraceTick(power);
             if (this.sensors[0] === 1) {
                 break;
@@ -473,7 +476,7 @@ export class Robot {
 
     // mengikuti garis sampai sensor yang ditentukan terkena garis kemudian robot maju kedepan selama step
     // sensor bisa berupa 1 digit (misal 7) atau 2 digit (misal 18 = sensor 1 atau 8)
-    async trigger(power: number, sensor: number, step: number) {
+    async trigger(power: number, sensor: number, step: number): Promise<boolean> {
         await this.checkStop();
 
         // Parse sensor value: single digit (1-8) or two-digit combo (12 = sensor 1 & 2)
@@ -486,22 +489,27 @@ export class Robot {
             if (s1 >= 1 && s1 <= 8) sensorIndices.push(s1 - 1);
             if (s2 >= 1 && s2 <= 8) sensorIndices.push(s2 - 1);
         }
-        if (sensorIndices.length === 0) return;
+        if (sensorIndices.length === 0) return false;
 
-        while (this._isSimulationRunning) {
+        let detected = false;
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             await this.lineTraceTick(power);
             // Cek apakah SALAH SATU sensor terkena garis
             if (sensorIndices.some(idx => this.sensors[idx] === 1)) {
+                detected = true;
                 break;
             }
         }
-        await this.motor(power, power, step);
+        if (detected) {
+            await this.motor(power, power, step);
+        }
+        return detected;
     }
 
     // (stop at all colour) megikuti garis sampai semua sensor tidak membaca garis (garis putus)
     async sac(power: number) {
         await this.checkStop();
-        while (this._isSimulationRunning) {
+        while (this._isSimulationRunning && !this.actionTimedOut) {
             await this.lineTraceTick(power);
             const activeSensors = this.sensors.reduce((a, b) => a + b, 0);
             if (activeSensors === 0) {
@@ -514,26 +522,26 @@ export class Robot {
 
     // (right line sensor) mengikuti garis sampai sensor yang ditentukan terkena garis, maju selama step, berputar ke kanan
     async rls(power: number, sensor: number, step: number) {
-        await this.trigger(power, sensor, step);
-        await this.tright(power);
+        const detected = await this.trigger(power, sensor, step);
+        if (detected) await this.tright(power);
     }
 
     // (left line sensor) mengikuti garis sampai sensor yang ditentukan terkena garis, maju selama step, berputar ke kiri
     async lls(power: number, sensor: number, step: number) {
-        await this.trigger(power, sensor, step);
-        await this.tleft(power);
+        const detected = await this.trigger(power, sensor, step);
+        if (detected) await this.tleft(power);
     }
 
     // (right line delay) mengikuti garis sampai sensor yg ditentukan terkena garis, maju selama step, berputar ke kanan selama delay
     async rld(power: number, sensor: number, step: number, delay: number) {
-        await this.trigger(power, sensor, step);
-        await this.motor(power, -power, delay);
+        const detected = await this.trigger(power, sensor, step);
+        if (detected) await this.motor(power, -power, delay);
     }
 
     // (left line delay) mengikuti garis sampai sensor yg ditentukan terkena garis, maju selama step, berputar ke kiri selama delay
     async lld(power: number, sensor: number, step: number, delay: number) {
-        await this.trigger(power, sensor, step);
-        await this.motor(-power, power, delay);
+        const detected = await this.trigger(power, sensor, step);
+        if (detected) await this.motor(-power, power, delay);
     }
 
     // Servo manipulations (simply delay in simulation)

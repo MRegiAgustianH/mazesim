@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } f
 import { useStore } from '../store/useStore';
 import { Robot } from './Robot';
 import { drawTrack } from './TrackPreset';
+import { QLearningAgent } from '../qlearning/QLearningAgent';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Configure the worker for PDF.js
@@ -24,6 +25,9 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
     const activeTrackWidthCm = useStore(state => state.activeTrackWidthCm);
     const activeTrackHeightCm = useStore(state => state.activeTrackHeightCm);
     const setSimulationState = useStore(state => state.setSimulationState);
+    const editorMode = useStore(state => state.editorMode);
+    const bestActions = useStore(state => state.bestActions);
+    const trainingPower = useStore(state => state.trainingPower);
     // Subscribe to trigger re-renders (draw loop reads via getState())
     const _startPoint = useStore(state => state.startPoint);
     const _finishPoint = useStore(state => state.finishPoint);
@@ -283,16 +287,46 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
 
     // Run JS Simulation Code
     useEffect(() => {
-        if (simulationState === 'running' && jsCode && robotRef.current) {
-            robotRef.current._isSimulationRunning = true;
+        if (simulationState !== 'running' || !robotRef.current) {
+            if (robotRef.current) {
+                robotRef.current._isSimulationRunning = false;
+                robotRef.current.lSpeed = 0;
+                robotRef.current.rSpeed = 0;
+            }
+            return;
+        }
 
+        robotRef.current._isSimulationRunning = true;
+        robotRef.current.fastMode = false;
+
+        if (editorMode === 'ai') {
+            // Mode AI Training: replay best episode actions
+            const actions = useStore.getState().bestActions;
+            const power = useStore.getState().trainingPower;
+            const robot = robotRef.current;
+            (async () => {
+                try {
+                    for (const a of actions) {
+                        if (!robot._isSimulationRunning) break;
+                        await QLearningAgent.runAction(robot, a.actionId, power);
+                    }
+                    console.log('AI replay finished');
+                } catch (err) {
+                    console.log('AI replay ended:', err);
+                } finally {
+                    setSimulationState('idle');
+                }
+            })();
+        } else {
+            // Mode Blockly: jalankan kode JS dari Blockly
+            if (!jsCode) { setSimulationState('idle'); return; }
             const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
             try {
                 const runner = new AsyncFunction('sim', jsCode);
                 runner(robotRef.current).then(() => {
                     console.log("Simulation finished successfully");
                     setSimulationState('idle');
-                }).catch((err: any) => {
+                }).catch((err) => {
                     console.log("Simulation ended or errored:", err);
                     setSimulationState('idle');
                 });
@@ -300,12 +334,8 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                 console.error("Error parsing JS generated code", e);
                 setSimulationState('idle');
             }
-        } else if (simulationState === 'idle' && robotRef.current) {
-            robotRef.current._isSimulationRunning = false;
-            robotRef.current.lSpeed = 0;
-            robotRef.current.rSpeed = 0;
         }
-    }, [simulationState, jsCode, activeTrack, setSimulationState]);
+    }, [simulationState, jsCode, activeTrack, editorMode, bestActions, trainingPower, setSimulationState]);
 
     // Clear and reset listeners
     useEffect(() => {
@@ -478,11 +508,15 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
     };
 
     const handleEndDraw = () => {
+        // Hanya update startPos bila user benar-benar drag/rotate robot.
+        // Sebelumnya startPosRef tertimpa pada setiap mouseUp idle (termasuk klik
+        // biasa di canvas setelah simulate) -> Reset pakai posisi salah. (bugfix)
+        const moved = isDraggingRobot || isRotatingRobot;
         setIsDrawing(false);
         setIsDraggingRobot(false);
         setIsRotatingRobot(false);
 
-        if (robotRef.current && simulationState === 'idle') {
+        if (moved && robotRef.current && simulationState === 'idle') {
             startPosRef.current = { x: robotRef.current.x, y: robotRef.current.y, angle: robotRef.current.angle };
         }
     };

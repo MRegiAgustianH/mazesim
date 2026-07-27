@@ -1,0 +1,20 @@
+﻿<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mzbg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6366F1"/>
+      <stop offset="0.55" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+    <filter id="mzglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.1"/>
+    </filter>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#mzbg)"/>
+  <g stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.96">
+    <path d="M6 26 V10 H12 V18 H20 V10 H26 V26"/>
+    <path d="M12 18 H8.5"/>
+    <path d="M20 10 V6.5"/>
+  </g>
+  <circle cx="26" cy="26" r="3.1" fill="#34D399" filter="url(#mzglow)" opacity="0.9"/>
+  <circle cx="26" cy="26" r="1.9" fill="#ECFEFF"/>
+</svg>

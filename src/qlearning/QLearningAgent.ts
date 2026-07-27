@@ -16,14 +16,12 @@ export const ACTIONS = [
   { id: 1,  name: 'tleft',      label: 'Turn Left (putar kiri 90°)' },
   { id: 2,  name: 'rl',         label: 'Right Line (rl) — sensor 8 → maju → putar kanan' },
   { id: 3,  name: 'll',         label: 'Left Line (ll) — sensor 1 → maju → putar kiri' },
-  { id: 4,  name: 'prl',        label: 'Past Right Line (prl) — sensor 8 → maju' },
-  { id: 5,  name: 'pll',        label: 'Past Left Line (pll) — sensor 1 → maju' },
-  { id: 6,  name: 'rls',        label: 'Right Line Sensor (rls) — sensor N → maju → putar kanan' },
-  { id: 7,  name: 'lls',        label: 'Left Line Sensor (lls) — sensor N → maju → putar kiri' },
-  { id: 8,  name: 'sac',        label: 'Stop at All Colors (garis putus)' },
-  { id: 9,  name: 'trigger',    label: 'Trigger (sensor N → maju)' },
-  { id: 10, name: 'ld',         label: 'Line Delay (ikuti garis selama waktu)' },
-  { id: 11, name: 'motor_fwd',  label: 'Motor Maju (lurus)' },
+  { id: 4,  name: 'rls',        label: 'Right Line Sensor (rls) — sensor N → maju → putar kanan' },
+  { id: 5,  name: 'lls',        label: 'Left Line Sensor (lls) — sensor N → maju → putar kiri' },
+  { id: 6,  name: 'trigger_l',   label: 'Trigger Left (sensor 1 — maju)' },
+  { id: 7,  name: 'trigger_r',   label: 'Trigger Right (sensor 8 — maju)' },
+  { id: 8,  name: 'ld',         label: 'Line Delay (ikuti garis selama waktu)' },
+  { id: 9,  name: 'sac',         label: 'Stop at All Colours (maju sampai garis putus)' },
 ] as const;
 
 export const NUM_ACTIONS = ACTIONS.length;
@@ -75,6 +73,7 @@ const CANVAS_SIZE = 800;
 const BOUNDARY_MARGIN = 10;
 const WAYPOINT_RADIUS = 50;  // Radius deteksi waypoint (px) — diperbesar agar tidak terlewat
 const FINISH_RADIUS = 50;    // Radius deteksi finish (px)
+const TICK_PENALTY = 0.5;   // Penalti per tick gerak — cegah exploit aksi jauh murah (ponytail: naikkan kalau lls/rls masih menang)
 
 export class QLearningAgent {
   qTable: Record<string, number[]> = {};
@@ -321,6 +320,8 @@ export class QLearningAgent {
 
       // === STEP PENALTY ===
       stepReward -= 3;
+      // === TICK PENALTY (proporsional waktu gerak, cegah exploit lls/rls/sac maju jauh murah) ===
+      stepReward -= robot.actionTicks * TICK_PENALTY;
 
       // === Cek semua target yang mungkin tercapai (loop untuk kasus waypoint berdekatan) ===
       while (currentTargetIdx < targets.length) {
@@ -348,7 +349,8 @@ export class QLearningAgent {
         } else {
           // Bonus/penalti berdasarkan perubahan jarak ke target
           const distDelta = previousDist - dist;
-          stepReward += distDelta * 1.0;
+          // ponytail: cap shaping 50px/step supaya aksi jauh (lls/rls) tak dapat reward disproportional
+          stepReward += Math.min(distDelta, 50) * 1.0;
           previousDist = dist;
           break; // Belum sampai target, keluar dari while
         }
@@ -406,26 +408,28 @@ export class QLearningAgent {
   }
 
   /**
-   * Jalankan aksi pada robot simulator (tanpa lineTrace)
+   * Jalankan satu aksi pada robot. Static agar bisa dipakai replay simulate (mode AI).
    */
-  private async executeAction(robot: Robot, actionId: number): Promise<void> {
-    robot.actionTicks = 0; // Reset tick counter for this action step to prevent infinite loop
-    const power = this.config.power;
-    const step = 100;
+  static async runAction(robot: Robot, actionId: number, power: number, step: number = 100): Promise<void> {
+    robot.actionTicks = 0;
+    robot.actionTimedOut = false;
     switch (actionId) {
-      case 0:  await robot.tright(power); break;
-      case 1:  await robot.tleft(power); break;
-      case 2:  await robot.rl(power, step); break;
-      case 3:  await robot.ll(power, step); break;
-      case 4:  await robot.prl(power, step); break;
-      case 5:  await robot.pll(power, step); break;
-      case 6:  await robot.rls(power, 7, step); break;
-      case 7:  await robot.lls(power, 2, step); break;
-      case 8:  await robot.sac(power); break;
-      case 9:  await robot.trigger(power, 1, step); break;
-      case 10: await robot.ld(power, 500); break;
-      case 11: await robot.motor(power, power, 200); break;
+      case 0: await robot.tright(power); break;
+      case 1: await robot.tleft(power); break;
+      case 2: await robot.rl(power, step); break;
+      case 3: await robot.ll(power, step); break;
+      case 4: await robot.rls(power, 7, step); break;
+      case 5: await robot.lls(power, 2, step); break;
+      case 6:  await robot.trigger(power, 1, step); break;
+      case 7:  await robot.trigger(power, 8, step); break;
+      case 8:  await robot.ld(power, 500); break;
+      case 9:  await robot.sac(power); break;
     }
+  }
+
+  /** Jalankan aksi pada robot simulator (dipakai saat training) */
+  private async executeAction(robot: Robot, actionId: number): Promise<void> {
+    await QLearningAgent.runAction(robot, actionId, this.config.power);
   }
 
   getOptimalPolicy(): Record<string, number> {
@@ -474,14 +478,12 @@ export class QLearningAgent {
         case 'tleft':     codeLines.push(`  my.tleft(${power});`); break;
         case 'rl':        codeLines.push(`  my.rl(${power}, 100);`); break;
         case 'll':        codeLines.push(`  my.ll(${power}, 100);`); break;
-        case 'prl':       codeLines.push(`  my.prl(${power}, 100);`); break;
-        case 'pll':       codeLines.push(`  my.pll(${power}, 100);`); break;
         case 'rls':       codeLines.push(`  my.rls(${power}, 7, 100);`); break;
         case 'lls':       codeLines.push(`  my.lls(${power}, 2, 100);`); break;
-        case 'sac':       codeLines.push(`  my.sac(${power});`); break;
-        case 'trigger':   codeLines.push(`  my.trigger(${power}, 1, 100);`); break;
+        case 'trigger_l':   codeLines.push(`  my.trigger(${power}, 1, 100);`); break;
+        case 'trigger_r':   codeLines.push(`  my.trigger(${power}, 8, 100);`); break;
         case 'ld':        codeLines.push(`  my.ld(${power}, 500);`); break;
-        case 'motor_fwd': codeLines.push(`  my.motor(${power}, ${power}, 200);`); break;
+        case 'sac':        codeLines.push(`  my.sac(${power});`); break;
       }
     }
 

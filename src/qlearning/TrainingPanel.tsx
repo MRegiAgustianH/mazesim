@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { QLearningAgent, DEFAULT_CONFIG, ACTIONS } from './QLearningAgent';
 import type { TrainingStats } from './QLearningAgent';
 import { convertTrackToGrid, GRID_SIZE, type Intersection } from './TrackGridConverter';
@@ -32,6 +32,9 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
   const removeWaypoint = useStore(state => state.removeWaypoint);
 
   const setCollectedWaypointIds = useStore(state => state.setCollectedWaypointIds);
+  const setBestActions = useStore(state => state.setBestActions);
+  const setTrainingPower = useStore(state => state.setTrainingPower);
+  const setTrainingSummary = useStore(state => state.setTrainingSummary);
 
   // Analisis track
   const analyzeTrack = useCallback(() => {
@@ -60,6 +63,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     const agent = agentRef.current;
     agent.config = { ...config };
     agent.isTraining = true;
+    setTrainingPower(config.power);
     robot.fastMode = isFastMode;
 
     const episodeActions: string[] = [];
@@ -158,10 +162,17 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
       setAllStats(tempStats);
     }
 
+    setBestActions(agent.bestActions);
     const finishedCount = agent.stats.filter(s => s.finished).length;
     setStatusMsg(
       `Training complete! ${agent.stats.length} episodes, ${finishedCount} reached finish. Best reward: ${agent.bestReward.toFixed(0)}`
     );
+    setTrainingSummary({
+      episodes: agent.stats.length,
+      finished: finishedCount,
+      bestReward: agent.bestReward,
+      qTableSize: Object.keys(agent.qTable).length,
+    });
   }, [robotRef, config, startPoint, finishPoint, waypoints, setCollectedWaypointIds, isFastMode]);
 
   // Stop training
@@ -184,9 +195,17 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     setStatusMsg('Arduino .ino code generated! Click "Download .ino" to save.');
   }, [onGenerateIno]);
 
+  // Dengarkan event dari modal global untuk generate .ino
+  useEffect(() => {
+    const handler = () => generateIno();
+    window.addEventListener('generate-ai-ino', handler);
+    return () => window.removeEventListener('generate-ai-ino', handler);
+  }, [generateIno]);
+
   // Reset
   const resetAgent = useCallback(() => {
     agentRef.current.reset();
+    setBestActions([]);
     setAllStats([]);
     setActionCounts([]);
     setGridReady(false);
@@ -403,9 +422,9 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
             {actionCounts.map((name, i) => {
               const colors: Record<string, string> = {
                 tright: 'bg-amber-600', tleft: 'bg-amber-600',
-                rl: 'bg-purple-600', ll: 'bg-purple-600', prl: 'bg-violet-600', pll: 'bg-violet-600',
+                rl: 'bg-purple-600', ll: 'bg-purple-600',
                 rls: 'bg-fuchsia-600', lls: 'bg-fuchsia-600',
-                sac: 'bg-rose-600', trigger: 'bg-cyan-600', ld: 'bg-teal-600', motor_fwd: 'bg-green-600',
+                trigger_l: 'bg-cyan-600', trigger_r: 'bg-cyan-600', sac: 'bg-rose-600', ld: 'bg-teal-600',
               };
               return (
                 <span
@@ -474,9 +493,9 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
               const actionInfo = ACTIONS[a.actionId];
               const colors: Record<string, string> = {
                 tright: 'bg-amber-600', tleft: 'bg-amber-600',
-                rl: 'bg-purple-600', ll: 'bg-purple-600', prl: 'bg-violet-600', pll: 'bg-violet-600',
+                rl: 'bg-purple-600', ll: 'bg-purple-600',
                 rls: 'bg-fuchsia-600', lls: 'bg-fuchsia-600',
-                sac: 'bg-rose-600', trigger: 'bg-cyan-600', ld: 'bg-teal-600', motor_fwd: 'bg-green-600',
+                trigger_l: 'bg-cyan-600', trigger_r: 'bg-cyan-600', sac: 'bg-rose-600', ld: 'bg-teal-600',
               };
               return (
                 <span
@@ -531,6 +550,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
           </div>
         )}
       </div>
+
     </div>
   );
 };

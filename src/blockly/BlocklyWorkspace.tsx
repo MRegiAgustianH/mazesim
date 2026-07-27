@@ -13,39 +13,32 @@ import { CrossTabCopyPaste } from '@blockly/plugin-cross-tab-copy-paste';
 // @ts-ignore
 Blockly.setLocale(En);
 
-// Define standard tools toolbox + custom category
+// Define flat toolbox (no Basic Functions category)
 const toolboxInfo = {
-  kind: 'categoryToolbox',
+  kind: 'flyoutToolbox',
   contents: [
-    {
-      kind: 'category',
-      name: 'Basic Functions',
-      colour: 120,
-      contents: [
-        { kind: 'block', type: 'mrb_setup' },
-        { kind: 'block', type: 'mrb_start' },
-        { kind: 'block', type: 'mrb_motor' },
-        { kind: 'block', type: 'mrb_lineTrace' },
-        { kind: 'block', type: 'mrb_tright' },
-        { kind: 'block', type: 'mrb_tleft' },
-        { kind: 'block', type: 'mrb_rl' },
-        { kind: 'block', type: 'mrb_ll' },
-        { kind: 'block', type: 'mrb_prl' },
-        { kind: 'block', type: 'mrb_pll' },
-        { kind: 'block', type: 'mrb_rls' },
-        { kind: 'block', type: 'mrb_lls' },
-        { kind: 'block', type: 'mrb_rld' },
-        { kind: 'block', type: 'mrb_lld' },
-        { kind: 'block', type: 'mrb_ld' },
-        { kind: 'block', type: 'mrb_trigger' },
-        { kind: 'block', type: 'mrb_sac' },
-        { kind: 'block', type: 'mrb_pickup' },
-        { kind: 'block', type: 'mrb_putdown' },
-        { kind: 'block', type: 'mrb_blink' },
-        { kind: 'block', type: 'mrb_lc' },
-        { kind: 'block', type: 'mrb_delay' },
-      ],
-    }
+    { kind: 'block', type: 'mrb_setup' },
+    { kind: 'block', type: 'mrb_start' },
+    { kind: 'block', type: 'mrb_motor' },
+    { kind: 'block', type: 'mrb_lineTrace' },
+    { kind: 'block', type: 'mrb_tright' },
+    { kind: 'block', type: 'mrb_tleft' },
+    { kind: 'block', type: 'mrb_rl' },
+    { kind: 'block', type: 'mrb_ll' },
+    { kind: 'block', type: 'mrb_prl' },
+    { kind: 'block', type: 'mrb_pll' },
+    { kind: 'block', type: 'mrb_rls' },
+    { kind: 'block', type: 'mrb_lls' },
+    { kind: 'block', type: 'mrb_rld' },
+    { kind: 'block', type: 'mrb_lld' },
+    { kind: 'block', type: 'mrb_ld' },
+    { kind: 'block', type: 'mrb_trigger' },
+    { kind: 'block', type: 'mrb_sac' },
+    { kind: 'block', type: 'mrb_pickup' },
+    { kind: 'block', type: 'mrb_putdown' },
+    { kind: 'block', type: 'mrb_blink' },
+    { kind: 'block', type: 'mrb_lc' },
+    { kind: 'block', type: 'mrb_delay' },
   ],
 };
 
