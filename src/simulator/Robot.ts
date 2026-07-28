@@ -27,7 +27,6 @@ export class Robot {
     simTime: number = 0;
     actionTicks: number = 0;
     actionTimedOut: boolean = false;
-    simTime: number = 0;
 
     getNow(): number {
         return this.fastMode ? this.simTime : Date.now();

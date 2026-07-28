@@ -261,7 +261,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             ctx.fillStyle = isCollected ? '#fff' : '#000';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(isCollected ? '✓' : `${i + 1}`, wp.x, wp.y);
+            ctx.fillText(isCollected ? 'âœ“' : `${i + 1}`, wp.x, wp.y);
             // Label
             ctx.font = 'bold 9px sans-serif';
             ctx.fillStyle = isCollected ? '#22c55e' : '#f59e0b';
@@ -326,7 +326,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                 runner(robotRef.current).then(() => {
                     console.log("Simulation finished successfully");
                     setSimulationState('idle');
-                }).catch((err) => {
+                }).catch((err: unknown) => {
                     console.log("Simulation ended or errored:", err);
                     setSimulationState('idle');
                 });

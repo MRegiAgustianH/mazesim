@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Download, Play, Square, RotateCcw, Save, Brain, Blocks, CheckCircle, X } from 'lucide-react';
 import logo from './assets/logo.svg';
 import { BlocklyWorkspace } from './blockly/BlocklyWorkspace';
@@ -20,7 +20,6 @@ function App() {
   const setCustomTrackSrc = useStore((state) => state.setCustomTrackSrc);
   const workspaceXml = useStore((state) => state.workspaceXml);
   const editorMode = useStore((state) => state.editorMode);
-  const bestActions = useStore((state) => state.bestActions);
   const trainingSummary = useStore((state) => state.trainingSummary);
   const setTrainingSummary = useStore((state) => state.setTrainingSummary);
   const setEditorMode = useStore((state) => state.setEditorMode);
