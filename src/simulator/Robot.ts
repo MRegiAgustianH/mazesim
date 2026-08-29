@@ -27,6 +27,7 @@ export class Robot {
     simTime: number = 0;
     actionTicks: number = 0;
     actionTimedOut: boolean = false;
+    runId: number = 0;
 
     getNow(): number {
         return this.fastMode ? this.simTime : Date.now();
@@ -52,6 +53,19 @@ export class Robot {
 
     setContext(ctx: CanvasRenderingContext2D) {
         this.ctx = ctx;
+    }
+
+    // Reset episode-level state so each Simulate run starts clean.
+    // Without this, actionTicks/actionTimedOut accumulate across runs and
+    // every line-trace/turn action no-ops after ~1500 cumulative ticks.
+    resetRunState() {
+        this.actionTicks = 0;
+        this.actionTimedOut = false;
+        this.simTime = 0;
+        this.lSpeed = 0;
+        this.rSpeed = 0;
+        this._tickResolve = null; // abandon pending tick from a stopped run
+        this.runId++; // invalidate any stale runner suspended in sleep()
     }
 
     update(dt: number) {
@@ -270,7 +284,11 @@ export class Robot {
             }
             return Promise.resolve();
         }
-        return new Promise(resolve => setTimeout(resolve, ms));
+        const run = this.runId;
+        return new Promise<void>((resolve, reject) => setTimeout(() => {
+            if (this.runId !== run) reject(new Error("Simulation Stopped"));
+            else resolve();
+        }, ms));
     }
 
     waitForTick(): Promise<void> {

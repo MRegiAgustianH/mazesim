@@ -550,14 +550,101 @@ Tabel 4.3 Skenario Black Box Testing
 | 7  | AI Training     | Menjalankan training Q-Learning       | Statistik episode tampil           |
 | 8  | Download .ino   | Mengunduh hasil training/blockly      | File Arduino berhasil diunduh      |
 
-### 4.2.2 Pengujian Algoritma Q-Learning
+### 4.2.2 Pengujian White Box Algoritma Q-Learning
+
+Pengujian white box dilakukan terhadap alur logika algoritma Q-Learning
+berdasarkan flowchart training Q-Table yang telah dirancang pada Bab III.
+Pengujian ini bertujuan untuk memastikan seluruh jalur keputusan (path) dan
+perulangan (looping) pada proses pembelajaran robot telah berjalan dengan
+benar tanpa adanya kebuntuan logika (deadlock). Pengujian menggunakan metode
+basis path testing dengan memetakan flowchart menjadi Graf Alur Kendali
+(Control Flow Graph, CFG).
+
+#### 4.2.2.1 Pemetaan Node Flowchart ke Control Flow Graph (CFG)
+
+ 
+
+Tabel 4.3 Node Control Flow Graph (CFG) Q-Learning
+| Node | Aktivitas / Pernyataan | Keterangan |
+|------|------------------------|------------|
+| Start| Mulai | Titik awal program |
+| 1    | Inisialisasi Q-Table & Parameter | Pengesetan awal nilai Q=0, alpha, gamma, epsilon |
+| 2    | Mulai Episode | episode = episode + 1, reset posisi robot ke start |
+| 3    | Baca State S | Membaca kombinasi 8 sensor garis virtual |
+| 4    | Pilih Action A | Epsilon-greedy policy (eksplorasi / eksploitasi) |
+| 5    | Lakukan Action A | Robot bergerak fisik pada simulator |
+| 6    | Dapatkan Reward R | Evaluasi reward berdasarkan kondisi sensor |
+| 7    | Observasi State Baru S_t+1 | Membaca sensor pasca-aksi |
+| 8    | Update Q-Table | Pembaruan nilai Q menggunakan persamaan Bellman |
+| 9    | Decision: Episode Selesai? | Cek apakah robot mencapai finish atau step >= max_step |
+| 10   | Decision: Semua Episode Selesai? | Cek apakah episode >= max_episode |
+| 11   | Simpan Q-Table / Policy | Menyimpan policy pergerakan terbaik |
+| 12   | Konversi ke File .ino | Export strategi pergerakan menjadi kode Arduino |
+| End  | Selesai | Akhir eksekusi program |
+
+Graf Alur Kendali (CFG) bulat berdasarkan pemetaan node di atas ditunjukkan
+pada Gambar 4.4.
+
+Gambar 4.4 Control Flow Graph (CFG) Training Q-Table
+
+#### 4.2.2.2 Perhitungan Kompleksitas Siklomatik (Cyclomatic Complexity)
+
+Kompleksitas siklomatik $V(G)$ digunakan untuk menentukan jumlah jalur
+independen yang harus diuji. Berdasarkan CFG pada Gambar 4.4, perhitungan
+dilakukan menggunakan dua rumus berikut.
+
+**1. Rumus Node Predikat:**
+Node predikat ($P$) adalah node keputusan pada graf yang memiliki cabang
+keluar lebih dari satu. Berdasarkan CFG, terdapat 2 node predikat yaitu
+**Node 9** (cabang ke Node 3 dan Node 10) dan **Node 10** (cabang ke Node 2
+dan Node 11).
+
+```
+V(G) = P + 1
+V(G) = 2 + 1 = 3
+```
+
+**2. Rumus Edge-Node:**
+Dihitung berdasarkan jumlah Edge ($E = 15$) dan jumlah Node ($N = 14$):
+
+```
+V(G) = E - N + 2
+V(G) = 15 - 14 + 2 = 3
+```
+
+Kedua rumus menghasilkan nilai $V(G) = 3$, yang berarti terdapat 3 jalur
+basis independen yang harus diuji untuk mencakup seluruh percabangan logika
+pada flowchart. 
+
+#### 4.2.2.3 Jalur Basis (Basis Path Testing)
+
+Berdasarkan nilai kompleksitas siklomatik $V(G) = 3$, ditentukan 3 jalur
+basis pengujian yang mencakup seluruh alur perulangan dan keputusan. Jalur
+basis tersebut dapat dilihat pada Tabel 4.4.
+
+Tabel 4.4 Jalur Basis Pengujian White Box Q-Learning
+| Path | Alur Node (Jalur Keputusan) | Kondisi Uji | Hasil yang Diharapkan |
+|------|---------------------------|-------------|-----------------------|
+| P1   | Start -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 (TIDAK) -> 3 | Perulangan langkah (step loop) saat robot berjalan di lintasan. | Robot terus melaju melakukan line tracing, membaca sensor, memilih aksi, dan mengupdate Q-table secara iteratif. |
+| P2   | Start -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 (YA) -> 10 (TIDAK) -> 2 | Perulangan episode (episode loop) saat robot selesai 1 run. | Episode berakhir karena robot mencapai finish atau step limit, robot kembali ke titik start, episode bertambah, dan training berlanjut. |
+| P3   | Start -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 (YA) -> 10 (YA) -> 11 -> 12 -> End | Penyelesaian training dan ekspor kode Arduino. | Seluruh episode training selesai, Q-table disimpan, dan kode Arduino (.ino) sukses digenerate. |
+
+Berdasarkan pengujian pada simulator, ketiga jalur basis ini terbukti telah
+dieksekusi secara sukses oleh sistem, ditandai dengan berjalannya simulasi
+langkah per langkah pada canvas (P1), pergantian episode secara otomatis
+ke posisi start (P2), serta munculnya modal selesai training dan file `.ino`
+yang siap diunduh saat episode mencapai batas maksimal (P3). Hasil pengujian
+menunjukkan alur logika rancangan flowchart Bab III telah bebas dari
+kesalahan logika.
+
+### 4.2.3 Pengujian Algoritma Q-Learning
 
 Pengujian algoritma Q-Learning dilakukan dengan menjalankan proses training
 pada lintasan uji `track 1.jpeg` berukuran asli 1,5 meter x 1,5 meter.
 Pengujian mengevaluasi kemampuan robot mencapai finish, jumlah langkah,
 nilai reward, serta kestabilan pergerakan robot.
 
-#### 4.2.2.1 Lintasan Uji
+#### 4.2.3.1 Lintasan Uji
 
 Lintasan uji `track 1` berupa gambar lintasan line follower berukuran
 1,5m x 1,5m yang diunggah ke simulator. Lintasan memiliki struktur
@@ -565,11 +652,11 @@ maze-like dengan beberapa persimpangan T-junction dan jalan buntu
 (dead-end). Lintasan ini dipilih karena merepresentasikan kondisi
 kompetisi nyata.
 
-#### 4.2.2.2 Parameter Training
+#### 4.2.3.2 Parameter Training
 
-Parameter training yang digunakan dapat dilihat pada Tabel 4.4.
+Parameter training yang digunakan dapat dilihat pada Tabel 4.6.
 
-Tabel 4.4 Parameter Training Q-Learning
+Tabel 4.6 Parameter Training Q-Learning
 | Parameter          | Nilai | Keterangan                       |
 |--------------------|-------|----------------------------------|
 | alpha              | 0.2   | Learning rate                    |
@@ -581,16 +668,16 @@ Tabel 4.4 Parameter Training Q-Learning
 | maxEpisodes        | 1000  | Jumlah episode training          |
 | power              | 100   | Daya motor                       |
 
-#### 4.2.2.3 Hasil Training
+#### 4.2.3.3 Hasil Training
 
 Training dilakukan pada lintasan uji `track 1` dengan parameter pada
-Tabel 4.4. Selama proses training, sistem mencatat total reward, jumlah
+Tabel 4.6. Selama proses training, sistem mencatat total reward, jumlah
 langkah, nilai epsilon, dan status pencapaian finish untuk setiap episode.
 Data tersebut divisualisasikan pada panel statistik AI Training secara
 real-time. Hasil training disajikan dalam bentuk grafik reward per episode,
 jumlah langkah per episode, serta persentase episode yang mencapai finish.
 
-Tabel 4.5 Ringkasan Hasil Training
+Tabel 4.7 Ringkasan Hasil Training
 | Parameter                         | Nilai | Keterangan                          |
 |-----------------------------------|-------|-------------------------------------|
 | Jumlah episode dijalankan         | 1000  | Sesuai maxEpisodes                  |
@@ -602,10 +689,10 @@ Tabel 4.5 Ringkasan Hasil Training
 Berdasarkan riwayat training (Reward History) pada Gambar 4.2, proses training menunjukkan dinamika eksplorasi dan eksploitasi yang berjalan dengan baik. Pada awal episode, grafik didominasi oleh batang berwarna merah (reward negatif) yang mengindikasikan robot sering keluar jalur atau kehabisan langkah akibat eksplorasi acak (epsilon masih tinggi). Namun, seiring berjalannya episode, batang berwarna kuning (mencapai finish) dan batang hijau (reward positif) mulai muncul secara berulang. Dari total 1000 episode, robot berhasil mencapai finish sebanyak 334 kali dengan nilai best reward sebesar 1877. Peningkatan reward ini membuktikan bahwa agen Q-Learning berhasil memperbarui Q-table hingga menemukan rangkaian aksi yang stabil dan optimal untuk mencapai garis finish.
 
 Urutan aksi terbaik (best actions) hasil training dapat dilihat pada
-Tabel 4.6. Urutan aksi tersebut kemudian dikonversi menjadi kode Arduino
+Tabel 4.8. Urutan aksi tersebut kemudian dikonversi menjadi kode Arduino
 `.ino` melalui metode `policyToArduinoCode`.
 
-Tabel 4.6 Urutan Aksi Terbaik (Best Episode)
+Tabel 4.8 Urutan Aksi Terbaik (Best Episode)
 | No | Aksi       | Keterangan                                                              |
 |----|------------|-------------------------------------------------------------------------|
 | 1  | trigger_r  | Maju mendeteksi sensor 8 di persimpangan pertama (menuju Waypoint 1)    |
@@ -614,7 +701,7 @@ Tabel 4.6 Urutan Aksi Terbaik (Best Episode)
 | 4  | lls        | Mengikuti garis menggunakan sensor 2 untuk mendeteksi persimpangan kiri |
 | 5  | trigger_l  | Maju mendeteksi sensor 1 hingga mencapai titik Finish                    |
 
-#### 4.2.2.4 Analisis dan Evaluasi
+#### 4.2.3.4 Analisis dan Evaluasi
 
 Berdasarkan implementasi dan pengujian, ditemukan beberapa hal penting
 terkait perilaku agent Q-Learning dan perancangan reward pada simulator
@@ -686,7 +773,7 @@ diikuti aksi belok (`tright`/`tleft`) sesuai struktur lintasan. Namun
 demikian, efektivitas training masih dipengaruhi oleh ukuran lintasan,
 kepadatan persimpangan, serta nilai parameter alpha, gamma, dan epsilon.
 
-### 4.2.3 Perbandingan Strategi Manual (Blockly) dengan Q-Learning
+### 4.2.4 Perbandingan Strategi Manual (Blockly) dengan Q-Learning
 
 Pengujian ini bertujuan untuk membandingkan efektivitas strategi pergerakan
 robot yang disusun secara manual melalui mode Blockly dengan strategi yang
@@ -696,7 +783,7 @@ finish yang identik. Pengujian ini menjawab tujuan penyediaan simulator
 sebagai tools penyusunan strategi pergerakan robot dalam menghadapi
 kompetisi robot line follower.
 
-#### 4.2.3.1 Skenario Pengujian
+#### 4.2.4.1 Skenario Pengujian
 
 Pengujian dilakukan melalui dua skenario berikut.
 
@@ -712,15 +799,15 @@ Kedua strategi dijalankan melalui tombol Simulate pada masing-masing mode.
 Metrik yang diukur meliputi keberhasilan mencapai finish, jumlah aksi
 (langkah) yang digunakan, dan nilai reward total.
 
-#### 4.2.3.2 Strategi Manual Blockly
+#### 4.2.4.2 Strategi Manual Blockly
 
 Pada skenario manual, pengguna menyusun urutan blok Blockly dengan fungsi
 kendali yang tersedia, seperti `trigger`, `tright`, `tleft`, `rl`, dan `ll`.
 Proses penyusunan dilakukan secara berulang karena pengguna perlu
 menyesuaikan urutan aksi setiap kali robot keluar jalur atau gagal mencapai
-finish. Tabel 4.7 menunjukkan contoh urutan aksi hasil susunan manual.
+finish. Tabel 4.9 menunjukkan contoh urutan aksi hasil susunan manual.
 
-Tabel 4.7 Strategi Manual Hasil Susunan Blockly
+Tabel 4.9 Strategi Manual Hasil Susunan Blockly
 | No | Aksi       | Parameter                     | Keterangan                                                              |
 |----|------------|-------------------------------|-------------------------------------------------------------------------|
 | 1  | trigger    | Pwr: 100, Sensor: 1, Step: 100| Maju mendeteksi sensor 1 (kiri luar) di persimpangan pertama            |
@@ -728,19 +815,19 @@ Tabel 4.7 Strategi Manual Hasil Susunan Blockly
 | 3  | lls        | Pwr: 100, Sensor: 2, Step: 100| Maju mendeteksi sensor 2 (kiri) di tikungan berikutnya, lalu putar kiri |
 | 4  | trigger    | Pwr: 100, Sensor: 1, Step: 100| Maju mendeteksi sensor 1 (kiri luar) hingga mencapai garis Finish       |
 
-#### 4.2.3.3 Strategi Q-Learning
+#### 4.2.4.3 Strategi Q-Learning
 
 Pada skenario Q-Learning, sistem menjalankan training sebanyak 1000 episode
-dengan parameter pada Tabel 4.4. Hasil training menghasilkan urutan aksi
+dengan parameter pada Tabel 4.6. Hasil training menghasilkan urutan aksi
 terbaik sebanyak 5 langkah dengan total reward 1877, sebagaimana telah
-dipaparkan pada Tabel 4.6.
+dipaparkan pada Tabel 4.8.
 
-#### 4.2.3.4 Hasil Perbandingan
+#### 4.2.4.4 Hasil Perbandingan
 
 Hasil perbandingan antara strategi manual dan strategi Q-Learning dapat
-dilihat pada Tabel 4.8.
+dilihat pada Tabel 4.10.
 
-Tabel 4.8 Perbandingan Strategi Manual dan Q-Learning
+Tabel 4.10 Perbandingan Strategi Manual dan Q-Learning
 | Metrik                          | Strategi Manual (Blockly) | Strategi Q-Learning |
 |---------------------------------|---------------------------|---------------------|
 | Keberhasilan mencapai finish    | Berhasil                  | Berhasil            |
@@ -752,7 +839,7 @@ Tabel 4.8 Perbandingan Strategi Manual dan Q-Learning
 | Adaptasi terhadap lintasan baru | Perlu disusun ulang manual | Cukup training ulang |
 | Sumber strategi                 | Observasi & logika pengguna | Eksplorasi-eksploitasi Q-Learning |
 
-#### 4.2.3.5 Analisis Perbandingan
+#### 4.2.4.5 Analisis Perbandingan
 
 Berdasarkan hasil perbandingan, terdapat beberapa temuan penting. Pada
 dimensi waktu penyusunan, strategi manual dapat lebih cepat apabila
@@ -793,14 +880,14 @@ simulator dapat menjalankan kedua peran tersebut secara komplementer,
 sesuai dengan tujuan simulator sebagai media pembelajaran dan tools
 penyusunan strategi pergerakan robot.
 
-### 4.2.4 Pengujian Konversi ke Kode Arduino
+### 4.2.5 Pengujian Konversi ke Kode Arduino
 
 Hasil best actions dari training dikonversi menjadi kode Arduino `.ino`
 menggunakan `policyToArduinoCode`. Kode `.ino` kemudian diuji pada robot
 line follower fisik berbasis Arduino untuk memastikan kesesuaian strategi
 pergerakan antara simulasi dan implementasi nyata.
 
-### 4.2.5 Penerapan Mode Blockly pada Kegiatan Ekstrakurikuler Robotika
+### 4.2.6 Penerapan Mode Blockly pada Kegiatan Ekstrakurikuler Robotika
 
 Selain pengujian algoritma dan fungsionalitas sistem, simulator juga telah
 diterapkan pada kegiatan pembelajaran ekstrakurikuler Robotika di SMP Islam
@@ -810,16 +897,16 @@ dipilih karena memungkinkan siswa menyusun logika pergerakan robot secara
 visual melalui blok-blok program tanpa harus menulis kode secara langsung,
 sehingga sesuai untuk siswa yang baru mempelajari konsep pemrograman robot.
 
-#### 4.2.5.1 Waktu dan Tempat Kegiatan
+#### 4.2.6.1 Waktu dan Tempat Kegiatan
 
 Kegiatan pembelajaran dilaksanakan pada ekstrakurikuler Robotika di SMP
 Islam Al Azhar 20 Cianjur. Kegiatan melibatkan siswa peserta ekstrakurikuler
 Robotika dan difasilitasi oleh pengajar. Simulator dijalankan melalui
 browser pada perangkat komputer, kemudian siswa menyusun strategi
 pergerakan robot menggunakan blok Blockly pada lintasan yang telah
-disediakan. Tabel 4.9 menunjukkan ringkasan kegiatan penerapan simulator.
+disediakan. Tabel 4.11 menunjukkan ringkasan kegiatan penerapan simulator.
 
-Tabel 4.9 Ringkasan Kegiatan Penerapan Simulator
+Tabel 4.11 Ringkasan Kegiatan Penerapan Simulator
 | Aspek                | Keterangan                                          |
 |----------------------|-----------------------------------------------------|
 | Tempat               | SMP Islam Al Azhar 20 Cianjur                       |
@@ -829,7 +916,7 @@ Tabel 4.9 Ringkasan Kegiatan Penerapan Simulator
 | Tanggal pelaksanaan  | ...                                                 |
 | Perangkat            | Komputer/laptop dengan browser                      |
 
-#### 4.2.5.2 Proses Pembelajaran
+#### 4.2.6.2 Proses Pembelajaran
 
 Proses pembelajaran diawali dengan pengenalan komponen simulator, meliputi
 area canvas, panel Blockly, serta tombol Simulate dan Stop. Selanjutnya
@@ -844,13 +931,13 @@ apakah robot berhasil mencapai finish atau keluar jalur. Apabila robot
 gagal, siswa dapat memperbaiki urutan blok dan menjalankan simulasi kembali
 tanpa perlu menggunakan robot fisik. Hal ini memungkinkan proses trial and
 error dilakukan secara virtual sehingga lebih efisien dan tidak berisiko
-merusak perangkat keras. Gambar 4.3 menunjukkan dokumentasi kegiatan
+merusak perangkat keras. Gambar 4.6 menunjukkan dokumentasi kegiatan
 penerapan simulator mode Blockly.
 
-Gambar 4.3 Penerapan Simulator Mode Blockly pada Kegiatan Ekstrakurikuler
+Gambar 4.6 Penerapan Simulator Mode Blockly pada Kegiatan Ekstrakurikuler
 Robotika di SMP Islam Al Azhar 20 Cianjur
 
-#### 4.2.5.3 Hasil Penerapan
+#### 4.2.6.3 Hasil Penerapan
 
 Berdasarkan pelaksanaan kegiatan, mode Blockly pada simulator dapat
 digunakan sebagai media pembelajaran pemrograman robot line follower. Siswa

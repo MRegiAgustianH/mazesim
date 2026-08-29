@@ -48,6 +48,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
     const lastTimeRef = useRef<number>(0);
     const pixelsPerCmRef = useRef<number>(5.33);
     const startPosRef = useRef({ x: 0, y: 0, angle: 0 });
+    const runTokenRef = useRef(0);
 
     // Expose refs to parent via imperative handle
     useImperativeHandle(ref, () => ({
@@ -298,6 +299,18 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
 
         robotRef.current._isSimulationRunning = true;
         robotRef.current.fastMode = false;
+        robotRef.current.resetRunState();
+
+        // Start each run from the home position so behavior is reproducible
+        // across repeated Simulate clicks (no cross-run position drift).
+        const home = startPosRef.current;
+        robotRef.current.x = home.x;
+        robotRef.current.y = home.y;
+        robotRef.current.angle = home.angle;
+
+        // Token guard: a stale runner that aborts after a newer run started
+        // must not flip the active run back to idle.
+        const token = ++runTokenRef.current;
 
         if (editorMode === 'ai') {
             // Mode AI Training: replay best episode actions
@@ -314,7 +327,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                 } catch (err) {
                     console.log('AI replay ended:', err);
                 } finally {
-                    setSimulationState('idle');
+                    if (runTokenRef.current === token) setSimulationState('idle');
                 }
             })();
         } else {
@@ -325,14 +338,14 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                 const runner = new AsyncFunction('sim', jsCode);
                 runner(robotRef.current).then(() => {
                     console.log("Simulation finished successfully");
-                    setSimulationState('idle');
+                    if (runTokenRef.current === token) setSimulationState('idle');
                 }).catch((err: unknown) => {
                     console.log("Simulation ended or errored:", err);
-                    setSimulationState('idle');
+                    if (runTokenRef.current === token) setSimulationState('idle');
                 });
             } catch (e) {
                 console.error("Error parsing JS generated code", e);
-                setSimulationState('idle');
+                if (runTokenRef.current === token) setSimulationState('idle');
             }
         }
     }, [simulationState, jsCode, activeTrack, editorMode, bestActions, trainingPower, setSimulationState]);
@@ -362,8 +375,10 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             if (trackCanvas && trackCanvas.getContext('2d')) {
                 robotRef.current.setContext(trackCanvas.getContext('2d')!);
             }
-            // Trigger a single frame render to show the reset immediately
-            draw(performance.now());
+            // Main rAF loop (started in the init effect) already renders every
+            // frame, so we don't call draw() here — that would spawn a duplicate
+            // requestAnimationFrame chain whose physics updates pile up across
+            // repeated resets and corrupt robot motion.
         };
 
         window.addEventListener('clear-custom-track', handleClear);
