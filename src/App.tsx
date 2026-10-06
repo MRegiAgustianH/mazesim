@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Play, Square, RotateCcw, Save, Brain, Blocks, CheckCircle, X } from 'lucide-react';
+import { Download, Play, Square, RotateCcw, Save, Brain, Blocks, CheckCircle, X, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import logo from './assets/logo.svg';
 import { BlocklyWorkspace } from './blockly/BlocklyWorkspace';
 import { CanvasRenderer, type CanvasRendererHandle } from './simulator/CanvasRenderer';
@@ -24,9 +24,10 @@ function App() {
   const setTrainingSummary = useStore((state) => state.setTrainingSummary);
   const setEditorMode = useStore((state) => state.setEditorMode);
   const [saveStatus, setSaveStatus] = React.useState('');
-
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [mobileTab, setMobileTab] = React.useState<'editor' | 'simulator'>('editor');
+  const [zoom, setZoom] = React.useState(1);
   const canvasRendererRef = React.useRef<CanvasRendererHandle>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Create stable refs that TrainingPanel can use
   const trackCanvasProxyRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -118,7 +119,7 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-100 font-sans overflow-hidden">
+    <div className="flex flex-col h-[100dvh] w-screen bg-slate-100 font-sans overflow-hidden">
       {/* Header */}
       <header className="flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-20 w-full relative gap-3 md:gap-0">
         <div className="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-start">
@@ -165,9 +166,9 @@ function App() {
       </header>
 
       {/* Main Content Area - Split Screen */}
-      <main className="flex-1 flex flex-col lg:flex-row w-full relative overflow-y-auto lg:overflow-hidden h-[calc(100vh-100px)] lg:h-[calc(100vh-65px)]">
+      <main className="flex-1 flex flex-col lg:flex-row w-full relative overflow-hidden">
         {/* Left Panel - Editor (Blockly or AI Training) */}
-        <section className="w-full lg:w-1/2 h-[60vh] min-h-[500px] lg:h-full lg:min-h-0 border-b lg:border-b-0 lg:border-r border-slate-300 bg-white flex flex-col relative z-10 flex-shrink-0">
+        <section className={`${mobileTab === 'editor' ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 h-full border-b lg:border-b-0 lg:border-r border-slate-300 bg-white flex-col relative z-10 flex-shrink-0`}>
           {/* Tab Header */}
           <div className="absolute top-0 left-0 right-0 p-2 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10">
             <div className="flex items-center space-x-1">
@@ -211,7 +212,7 @@ function App() {
         </section>
 
         {/* Right Panel - Simulator UI */}
-        <section className="w-full lg:w-1/2 h-[60vh] min-h-[500px] lg:h-full lg:min-h-0 bg-slate-200 flex flex-col relative z-10 flex-shrink-0">
+        <section className={`${mobileTab === 'simulator' ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 h-full bg-slate-200 flex-col relative z-10 flex-shrink-0`}>
           <div className="absolute top-0 left-0 right-0 p-2 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
             <span className="hidden sm:inline">SIMULATOR</span>
             <div className="flex space-x-2 items-center min-w-max">
@@ -267,14 +268,48 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="absolute top-10 bottom-0 left-0 right-0 p-8 flex items-center justify-center bg-slate-200">
+          <div className="absolute top-10 bottom-0 left-0 right-0 p-2 md:p-8 bg-slate-200 overflow-auto">
+            {/* Zoom Controls */}
+            <div className="fixed md:absolute bottom-20 md:bottom-auto md:top-4 right-4 flex flex-col space-y-2 z-20">
+               <button onClick={()=>setZoom(z=>z+0.25)} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title="Zoom In">
+                 <ZoomIn className="w-5 h-5"/>
+               </button>
+               <button onClick={()=>setZoom(1)} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title="Reset Zoom">
+                 <Maximize className="w-5 h-5"/>
+               </button>
+               <button onClick={()=>setZoom(z=>Math.max(0.25, z-0.25))} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title="Zoom Out">
+                 <ZoomOut className="w-5 h-5"/>
+               </button>
+            </div>
+            
             {/* Canvas */}
-            <div className="w-full h-full max-h-[800px] aspect-square bg-white shadow-md rounded-lg flex items-center justify-center border border-slate-300 relative overflow-hidden mx-auto">
+            <div 
+              style={{ width: `${zoom * 100}%`, minWidth: `${zoom * 300}px`, maxWidth: `${zoom * 800}px` }}
+              className="mx-auto aspect-square bg-white shadow-md rounded-lg flex items-center justify-center border border-slate-300 relative overflow-hidden origin-top transition-all duration-200"
+            >
               <CanvasRenderer ref={canvasRendererRef} />
             </div>
           </div>
         </section>
       </main>
+
+      {/* Mobile Tab Switcher */}
+      <div className="lg:hidden flex bg-white border-t border-slate-300 w-full z-30 flex-shrink-0">
+        <button
+          onClick={() => setMobileTab('editor')}
+          className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center space-x-2 ${mobileTab === 'editor' ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          <Blocks className="w-4 h-4" />
+          <span>Editor Blockly</span>
+        </button>
+        <button
+          onClick={() => setMobileTab('simulator')}
+          className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center space-x-2 ${mobileTab === 'simulator' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          <Play className="w-4 h-4" />
+          <span>Simulator Robot</span>
+        </button>
+      </div>
 
       {/* Modal Training Selesai (global, viewport-wide) */}
       {trainingSummary && (
