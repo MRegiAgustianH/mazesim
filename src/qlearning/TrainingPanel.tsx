@@ -91,6 +91,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     setStatusMsg(`Training started... Route: Start ? ${waypoints.length} waypoints ? Finish`);
 
     robot._isSimulationRunning = true;
+    robot.isTrainingMode = true;
 
     // Delay 500ms agar posisi robot awal terlihat di canvas (hanya jika lambat)
     if (!isFastMode) {
@@ -149,6 +150,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     }
 
     robot._isSimulationRunning = false;
+    robot.isTrainingMode = false;
     robot.lSpeed = 0;
     robot.rSpeed = 0;
     robot.fastMode = false; // Reset to normal mode
@@ -181,6 +183,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     setIsTraining(false);
     if (robotRef.current) {
       robotRef.current._isSimulationRunning = false;
+      robotRef.current.isTrainingMode = false;
       robotRef.current.lSpeed = 0;
       robotRef.current.rSpeed = 0;
     }

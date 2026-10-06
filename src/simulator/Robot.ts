@@ -27,6 +27,7 @@ export class Robot {
     simTime: number = 0;
     actionTicks: number = 0;
     actionTimedOut: boolean = false;
+    isTrainingMode: boolean = false;
     runId: number = 0;
 
     getNow(): number {
@@ -293,7 +294,7 @@ export class Robot {
 
     waitForTick(): Promise<void> {
         this.actionTicks++;
-        if (this.actionTicks > 1500) {
+        if (this.isTrainingMode && this.actionTicks > 1500) {
             // ponytail: graceful timeout (flag, bukan throw) supaya episode tetap dapat Q-update
             this.actionTimedOut = true;
             return Promise.resolve();
