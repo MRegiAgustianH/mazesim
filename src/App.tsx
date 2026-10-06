@@ -118,26 +118,28 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100 font-sans">
+    <div className="flex flex-col h-screen w-screen bg-slate-100 font-sans overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-20 w-full relative">
-        <div className="flex items-center space-x-3">
-          <img src={logo} alt="MazeSim" className="w-9 h-9 rounded-md shadow-sm" />
-          <h1 className="text-xl font-semibold text-slate-800">Simulator</h1>
+      <header className="flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-20 w-full relative gap-3 md:gap-0">
+        <div className="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-start">
+          <div className="flex items-center space-x-3">
+            <img src={logo} alt="MazeSim" className="w-9 h-9 rounded-md shadow-sm" />
+            <h1 className="text-xl font-semibold text-slate-800">Simulator</h1>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-hide">
           <button
             onClick={() => setSimulationState('running')}
             disabled={simulationState === 'running'}
-            className={`flex items-center space-x-1 px-4 py-2 text-white rounded-md transition-colors text-sm font-medium shadow-sm ${simulationState === 'running' ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+            className={`whitespace-nowrap flex flex-shrink-0 items-center space-x-1 px-4 py-2 text-white rounded-md transition-colors text-sm font-medium shadow-sm ${simulationState === 'running' ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
             <Play className="w-4 h-4" />
             <span>Simulate</span>
           </button>
           <button
             onClick={() => setSimulationState('idle')}
             disabled={simulationState === 'idle'}
-            className={`flex items-center space-x-1 px-4 py-2 text-white rounded-md transition-colors text-sm font-medium shadow-sm ${simulationState === 'idle' ? 'bg-rose-400 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700'}`}>
+            className={`whitespace-nowrap flex flex-shrink-0 items-center space-x-1 px-4 py-2 text-white rounded-md transition-colors text-sm font-medium shadow-sm ${simulationState === 'idle' ? 'bg-rose-400 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700'}`}>
             <Square className="w-4 h-4" />
             <span>Stop</span>
           </button>
@@ -146,16 +148,16 @@ function App() {
               setSimulationState('idle');
               window.dispatchEvent(new CustomEvent('reset-simulation'));
             }}
-            className="flex items-center space-x-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md transition-colors text-sm font-medium shadow-sm">
+            className="flex-shrink-0 flex items-center space-x-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md transition-colors text-sm font-medium shadow-sm">
             <RotateCcw className="w-4 h-4" />
           </button>
-          <div className="w-px h-6 bg-slate-300 mx-2"></div>
-          {saveStatus && <span className="text-emerald-600 text-xs font-semibold mr-2">{saveStatus}</span>}
-          <button onClick={handleSave} className="flex items-center space-x-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
+          <div className="w-px h-6 bg-slate-300 mx-2 flex-shrink-0"></div>
+          {saveStatus && <span className="text-emerald-600 text-xs font-semibold mr-2 whitespace-nowrap">{saveStatus}</span>}
+          <button onClick={handleSave} className="whitespace-nowrap flex flex-shrink-0 items-center space-x-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
             <Save className="w-4 h-4" />
             <span>Save</span>
           </button>
-          <button onClick={handleDownload} className="flex items-center space-x-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
+          <button onClick={handleDownload} className="whitespace-nowrap flex flex-shrink-0 items-center space-x-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
             <Download className="w-4 h-4" />
             <span>Download .ino</span>
           </button>
@@ -163,9 +165,9 @@ function App() {
       </header>
 
       {/* Main Content Area - Split Screen */}
-      <main className="flex-1 flex flex-row h-[calc(100vh-65px)] w-full relative">
+      <main className="flex-1 flex flex-col lg:flex-row w-full relative overflow-y-auto lg:overflow-hidden h-[calc(100vh-100px)] lg:h-[calc(100vh-65px)]">
         {/* Left Panel - Editor (Blockly or AI Training) */}
-        <section className="w-1/2 h-full border-r border-slate-300 bg-white flex flex-col relative z-10">
+        <section className="w-full lg:w-1/2 h-[60vh] min-h-[500px] lg:h-full lg:min-h-0 border-b lg:border-b-0 lg:border-r border-slate-300 bg-white flex flex-col relative z-10 flex-shrink-0">
           {/* Tab Header */}
           <div className="absolute top-0 left-0 right-0 p-2 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10">
             <div className="flex items-center space-x-1">
@@ -209,10 +211,10 @@ function App() {
         </section>
 
         {/* Right Panel - Simulator UI */}
-        <section className="w-1/2 h-full bg-slate-200 flex flex-col relative z-10">
-          <div className="absolute top-0 left-0 right-0 p-2 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10">
-            <span>SIMULATOR</span>
-            <div className="flex space-x-2">
+        <section className="w-full lg:w-1/2 h-[60vh] min-h-[500px] lg:h-full lg:min-h-0 bg-slate-200 flex flex-col relative z-10 flex-shrink-0">
+          <div className="absolute top-0 left-0 right-0 p-2 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
+            <span className="hidden sm:inline">SIMULATOR</span>
+            <div className="flex space-x-2 items-center min-w-max">
               {activeTrack === 'custom' && (
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('clear-custom-track'))}
