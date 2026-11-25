@@ -187,7 +187,7 @@ function App() {
                 onClick={() => setEditorMode('ai')}
                 className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
                   editorMode === 'ai'
-                    ? 'bg-purple-600 text-white shadow-sm'
+                    ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
                 }`}
               >
@@ -313,44 +313,44 @@ function App() {
 
       {/* Modal Training Selesai (global, viewport-wide) */}
       {trainingSummary && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl border border-slate-600 max-w-sm w-full mx-4 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40">
+          <div className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-sm w-full mx-4 overflow-hidden text-left">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-5 h-5 text-emerald-400" />
-                <span className="font-semibold text-white">Training Selesai</span>
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                <span className="font-semibold text-slate-900">Training Selesai</span>
               </div>
-              <button onClick={() => setTrainingSummary(null)} className="text-slate-400 hover:text-white transition-colors">
+              <button onClick={() => setTrainingSummary(null)} className="text-slate-400 hover:text-slate-700 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="px-5 py-5 space-y-3">
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-slate-600">
                 Proses training telah selesai. Robot dapat menjalankan hasil training melalui tombol Simulate.
               </p>
-              <div className="grid grid-cols-2 gap-3 text-center">
-                <div className="bg-slate-900 rounded-lg p-3">
-                  <div className="text-xs text-slate-400 mb-1">Episodes</div>
-                  <div className="text-lg font-bold text-white">{trainingSummary.episodes}</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md border border-slate-200 px-3 py-2">
+                  <div className="text-[11px] text-slate-500">Episodes</div>
+                  <div className="text-lg font-semibold text-slate-900 tabular-nums">{trainingSummary.episodes}</div>
                 </div>
-                <div className="bg-slate-900 rounded-lg p-3">
-                  <div className="text-xs text-slate-400 mb-1">Finished</div>
-                  <div className="text-lg font-bold text-purple-400">{trainingSummary.finished}</div>
+                <div className="rounded-md border border-slate-200 px-3 py-2">
+                  <div className="text-[11px] text-slate-500">Finished</div>
+                  <div className="text-lg font-semibold text-slate-900 tabular-nums">{trainingSummary.finished}</div>
                 </div>
-                <div className="bg-slate-900 rounded-lg p-3">
-                  <div className="text-xs text-slate-400 mb-1">Best Reward</div>
-                  <div className="text-lg font-bold text-emerald-400">{trainingSummary.bestReward.toFixed(0)}</div>
+                <div className="rounded-md border border-slate-200 px-3 py-2">
+                  <div className="text-[11px] text-slate-500">Best Reward</div>
+                  <div className="text-lg font-semibold text-slate-900 tabular-nums">{trainingSummary.bestReward.toFixed(0)}</div>
                 </div>
-                <div className="bg-slate-900 rounded-lg p-3">
-                  <div className="text-xs text-slate-400 mb-1">Q-Table States</div>
-                  <div className="text-lg font-bold text-amber-400">{trainingSummary.qTableSize}</div>
+                <div className="rounded-md border border-slate-200 px-3 py-2">
+                  <div className="text-[11px] text-slate-500">Q-Table States</div>
+                  <div className="text-lg font-semibold text-slate-900 tabular-nums">{trainingSummary.qTableSize}</div>
                 </div>
               </div>
             </div>
-            <div className="px-5 py-4 border-t border-slate-700 flex space-x-2">
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex space-x-2">
               <button
                 onClick={() => setTrainingSummary(null)}
-                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium text-white transition-colors"
+                className="flex-1 h-9 px-4 bg-white border border-slate-300 hover:bg-slate-50 rounded-md text-sm font-medium text-slate-700 transition-colors"
               >
                 Tutup
               </button>
@@ -359,7 +359,7 @@ function App() {
                   window.dispatchEvent(new CustomEvent('generate-ai-ino'));
                   setTrainingSummary(null);
                 }}
-                className="flex-1 flex items-center justify-center space-x-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm font-medium text-white transition-colors"
+                className="flex-1 h-9 flex items-center justify-center space-x-1 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium text-white transition-colors"
               >
                 <Download className="w-4 h-4" />
                 <span>Generate .ino</span>

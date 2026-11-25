@@ -75,6 +75,10 @@ export const BlocklyWorkspace: React.FC = () => {
     if (workspaceRef.current && !blocklyInstance.current) {
       blocklyInstance.current = Blockly.inject(workspaceRef.current, {
         toolbox: toolboxInfo,
+        // Serve media (zoom/trash sprites) locally so it always matches the installed
+        // Blockly version. The default unpkg URL resolves to the latest Blockly release,
+        // whose sprite sheet layout differs and breaks the zoom/trash icons.
+        media: `${import.meta.env.BASE_URL}blockly-media/`,
         grid: { spacing: 20, length: 3, colour: '#ccc', snap: true },
         trashcan: true,
         move: { scrollbars: true, drag: true, wheel: true },

@@ -3,7 +3,7 @@ import { QLearningAgent, DEFAULT_CONFIG, ACTIONS } from './QLearningAgent';
 import type { TrainingStats } from './QLearningAgent';
 import { convertTrackToGrid, GRID_SIZE, type Intersection } from './TrackGridConverter';
 import { useStore } from '../store/useStore';
-import { Brain, Play, Square, Download, RotateCcw, Zap, BarChart3, ChevronDown, ChevronUp, MapPin, Flag, CircleDot, Trash2 } from 'lucide-react';
+import { Play, Square, Download, RotateCcw, ChevronDown, ChevronUp, MapPin, Flag, Plus, Trash2, Check, Info, ScanLine, MousePointerClick, SlidersHorizontal } from 'lucide-react';
 
 interface TrainingPanelProps {
   trackCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -55,8 +55,8 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
   const startTraining = useCallback(async () => {
     const robot = robotRef.current;
     if (!robot) { setStatusMsg('Error: Robot not initialized'); return; }
-    if (!startPoint) { setStatusMsg('?? Set START point first!'); return; }
-    if (!finishPoint) { setStatusMsg('?? Set FINISH point first!'); return; }
+    if (!startPoint) { setStatusMsg('Set the Start point first.'); return; }
+    if (!finishPoint) { setStatusMsg('Set the Finish point first.'); return; }
 
     startPosRef.current = { x: robot.x, y: robot.y, angle: robot.angle };
 
@@ -80,7 +80,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
         );
       };
 
-      // Setup action counter callback ? real-time sequential list
+      // Setup action counter callback: real-time sequential list
       agent.onActionExecuted = (actionName: string) => {
         episodeActions.push(actionName);
         setActionCounts([...episodeActions]);
@@ -88,7 +88,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     }
 
     setIsTraining(true);
-    setStatusMsg(`Training started... Route: Start ? ${waypoints.length} waypoints ? Finish`);
+    setStatusMsg(`Training started. Route: Start → ${waypoints.length} waypoint(s) → Finish`);
 
     robot._isSimulationRunning = true;
     robot.isTrainingMode = true;
@@ -128,7 +128,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
             setAllStats([...tempStats]);
             const wpInfo = waypoints.length > 0 ? ` | WP: ${stats.waypointsCollected}/${waypoints.length + 1}` : '';
             setStatusMsg(
-              `Training: Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ?: ${stats.epsilon.toFixed(3)}${stats.finished ? ' ? FINISH!' : ''}`
+              `Training: Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ε: ${stats.epsilon.toFixed(3)}${stats.finished ? ' | Finished' : ''}`
             );
             // Yield control to the browser to prevent freezing and show progress
             await new Promise(r => setTimeout(r, 0));
@@ -137,7 +137,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
           setAllStats(prev => [...prev, stats]);
           const wpInfo = waypoints.length > 0 ? ` | WP: ${stats.waypointsCollected}/${waypoints.length + 1}` : '';
           setStatusMsg(
-            `Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ?: ${stats.epsilon.toFixed(3)}${stats.finished ? ' ? FINISH!' : ''}`
+            `Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ε: ${stats.epsilon.toFixed(3)}${stats.finished ? ' | Finished' : ''}`
           );
         }
       } catch (e) {
@@ -225,319 +225,311 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
   const qTableSize = Object.keys(agentRef.current.qTable).length;
   const finishedCount = allStats.filter(s => s.finished).length;
 
+  const hasPolicy = agentRef.current.bestActions.length > 0;
+  const recentStats = allStats.slice(-50);
+  const maxAbsReward = Math.max(...recentStats.map(x => Math.abs(x.totalReward)), 1);
+
+  // Shared styles
+  const sectionCls = 'px-4 py-4 border-b border-slate-200';
+  const labelCls = 'text-[11px] font-semibold uppercase tracking-wide text-slate-500';
+  const btnBase = 'inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium transition-colors disabled:cursor-not-allowed';
+  const btnPrimary = `${btnBase} bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400`;
+  const btnSecondary = `${btnBase} bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:text-slate-400 disabled:bg-slate-50`;
+  const btnDanger = `${btnBase} bg-white text-red-600 border border-red-300 hover:bg-red-50`;
+  const chipCls = 'px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-[10px] font-mono text-slate-700';
+
+  const routeBtn = (active: boolean, done: boolean) =>
+    `${btnBase} flex-1 border ${
+      active
+        ? 'border-blue-600 bg-blue-50 text-blue-700'
+        : done
+          ? 'border-slate-300 bg-white text-slate-800'
+          : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+    } disabled:opacity-50`;
+
+  const stepTitle = (n: number, title: string, hint?: string) => (
+    <div className="flex items-start gap-2.5 mb-3">
+      <span className="flex-shrink-0 w-5 h-5 rounded-full border border-slate-300 text-[11px] font-semibold text-slate-600 flex items-center justify-center">
+        {n}
+      </span>
+      <div className="leading-tight">
+        <div className="text-sm font-semibold text-slate-800">{title}</div>
+        {hint && <div className="text-xs text-slate-500 mt-0.5">{hint}</div>}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col h-full overflow-y-auto bg-gradient-to-b from-slate-900 to-slate-800 text-white">
+    <div className="flex flex-col h-full overflow-y-auto bg-white text-slate-800 text-left">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-700 bg-slate-900/80 backdrop-blur-sm">
-        <div className="flex items-center space-x-2 mb-1">
-          <Brain className="w-5 h-5 text-purple-400" />
-          <h2 className="text-lg font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-            Q-Learning AI Training
-          </h2>
-        </div>
-        <p className="text-xs text-slate-400">Train AI: Start → Waypoints → Finish</p>
+      <div className="px-4 py-3 border-b border-slate-200">
+        <h2 className="text-base font-semibold text-slate-900">Q-Learning Training</h2>
+        <p className="text-xs text-slate-500 mt-0.5">Train the robot to follow the route: Start → Waypoints → Finish.</p>
       </div>
 
-      {/* Step 0: Route Setup */}
-      <div className="px-4 py-3 space-y-2 border-b border-slate-700">
-        <div className="text-xs text-slate-400 font-semibold mb-1">0. Set Route (Start → Points → Finish)</div>
-        
-        {/* Start & Finish */}
-        <div className="flex space-x-2">
+      {/* Step 1: Route Setup */}
+      <div className={sectionCls}>
+        {stepTitle(1, "Set route", "Pick a point type, then click on the track canvas.")}
+
+        <div className="flex gap-2">
           <button
             onClick={() => setPlacementMode(placementMode === 'start' ? 'none' : 'start')}
             disabled={isTraining}
-            className={`flex-1 flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-              placementMode === 'start'
-                ? 'bg-green-500 text-white ring-2 ring-green-300 animate-pulse'
-                : startPoint
-                  ? 'bg-green-800 text-green-200 border border-green-600'
-                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-            }`}
+            className={routeBtn(placementMode === 'start', !!startPoint)}
           >
-            <MapPin className="w-3.5 h-3.5" />
-            <span>{startPoint ? '✓ Start' : 'Set Start'}</span>
+            <MapPin className="w-4 h-4 text-emerald-600" />
+            <span>Start</span>
+            {startPoint && <Check className="w-3.5 h-3.5 text-emerald-600" />}
           </button>
           <button
             onClick={() => setPlacementMode(placementMode === 'finish' ? 'none' : 'finish')}
             disabled={isTraining}
-            className={`flex-1 flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-              placementMode === 'finish'
-                ? 'bg-red-500 text-white ring-2 ring-red-300 animate-pulse'
-                : finishPoint
-                  ? 'bg-red-800 text-red-200 border border-red-600'
-                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-            }`}
+            className={routeBtn(placementMode === 'finish', !!finishPoint)}
           >
-            <Flag className="w-3.5 h-3.5" />
-            <span>{finishPoint ? '✓ Finish' : 'Set Finish'}</span>
+            <Flag className="w-4 h-4 text-red-600" />
+            <span>Finish</span>
+            {finishPoint && <Check className="w-3.5 h-3.5 text-emerald-600" />}
           </button>
         </div>
 
-        {/* Add Waypoint */}
         <button
           onClick={() => setPlacementMode(placementMode === 'waypoint' ? 'none' : 'waypoint')}
           disabled={isTraining}
-          className={`w-full flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-            placementMode === 'waypoint'
-              ? 'bg-amber-500 text-white ring-2 ring-amber-300 animate-pulse'
-              : 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-dashed border-slate-500'
-          }`}
+          className={`${routeBtn(placementMode === 'waypoint', false)} w-full mt-2 ${placementMode === 'waypoint' ? '' : 'border-dashed'}`}
         >
-          <CircleDot className="w-3.5 h-3.5" />
-          <span>+ Add Waypoint (titik yang harus dilalui)</span>
+          <Plus className="w-4 h-4" />
+          <span>Add waypoint</span>
+          <span className="text-xs font-normal text-slate-400">(point to pass through)</span>
         </button>
 
-        {/* Placement mode indicator */}
         {placementMode !== 'none' && (
-          <div className={`text-xs text-center py-1.5 rounded font-medium ${
-            placementMode === 'start' ? 'bg-green-900/80 text-green-300' :
-            placementMode === 'finish' ? 'bg-red-900/80 text-red-300' :
-            'bg-amber-900/80 text-amber-300'
-          }`}>
-            👆 Click on the canvas to place {placementMode.toUpperCase()} point
+          <div className="mt-2 flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+            <MousePointerClick className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>Click on the canvas to place the <strong className="font-semibold">{placementMode}</strong> point.</span>
           </div>
         )}
 
-        {/* Waypoints list */}
         {waypoints.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-xs text-slate-400">Route: Start → {waypoints.map((_, i) => `P${i + 1}`).join(' → ')} → Finish</div>
-            {waypoints.map((wp, i) => (
-              <div key={i} className="flex items-center justify-between bg-slate-800 rounded px-2 py-1 border border-slate-700">
-                <span className="text-xs text-amber-300 font-mono">
-                  P{i + 1}: ({Math.round(wp.x)}, {Math.round(wp.y)})
-                </span>
-                <button
-                  onClick={() => removeWaypoint(i)}
-                  disabled={isTraining}
-                  className="text-slate-500 hover:text-red-400 transition-colors disabled:opacity-30"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
+          <div className="mt-3">
+            <div className="text-xs text-slate-500 mb-1.5">
+              Route: Start → {waypoints.map((_, i) => `P${i + 1}`).join(' → ')} → Finish
+            </div>
+            <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
+              {waypoints.map((wp, i) => (
+                <li key={i} className="flex items-center justify-between px-3 py-1.5">
+                  <span className="text-xs text-slate-700">
+                    <span className="font-medium">P{i + 1}</span>
+                    <span className="ml-2 font-mono text-slate-400">({Math.round(wp.x)}, {Math.round(wp.y)})</span>
+                  </span>
+                  <button
+                    onClick={() => removeWaypoint(i)}
+                    disabled={isTraining}
+                    title="Remove waypoint"
+                    className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-30"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
 
-      {/* Control Buttons */}
-      <div className="px-4 py-3 space-y-2 border-b border-slate-700">
-        {/* Fast Training Checkbox */}
-        <label className="flex items-center space-x-2 py-1 cursor-pointer select-none">
+      {/* Step 2: Analyze & Train */}
+      <div className={sectionCls}>
+        {stepTitle(2, "Analyze & train", "Analyzing the track is optional but shows grid info.")}
+
+        <div className="flex gap-2">
+          <button onClick={analyzeTrack} disabled={isTraining} className={`${btnSecondary} flex-1`}>
+            <ScanLine className="w-4 h-4" />
+            <span>Analyze track</span>
+          </button>
+          {!isTraining ? (
+            <button
+              onClick={startTraining}
+              disabled={!startPoint || !finishPoint}
+              className={`${btnPrimary} flex-1`}
+              title={!startPoint || !finishPoint ? 'Set Start and Finish first' : 'Start training'}
+            >
+              <Play className="w-4 h-4" />
+              <span>Start training</span>
+            </button>
+          ) : (
+            <button onClick={stopTraining} className={`${btnDanger} flex-1`}>
+              <Square className="w-4 h-4" />
+              <span>Stop</span>
+            </button>
+          )}
+          <button onClick={resetAgent} disabled={isTraining} className={btnSecondary} title="Reset agent">
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
+
+        <label className="mt-3 flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={isFastMode}
             onChange={(e) => setIsFastMode(e.target.checked)}
             disabled={isTraining}
-            className="rounded border-slate-600 bg-slate-800 text-purple-500 focus:ring-purple-500"
+            className="h-4 w-4 rounded border-slate-300 accent-blue-600"
           />
-          <span className="text-xs text-slate-300">Fast Training (Background)</span>
+          <span className="text-xs text-slate-700">Fast training</span>
+          <span className="text-xs text-slate-400">— runs in background without animation</span>
         </label>
 
-        <div className="flex space-x-2">
-          <button
-            onClick={analyzeTrack}
-            disabled={isTraining}
-            className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-900 disabled:text-indigo-400 rounded-lg text-sm font-medium transition-all shadow-lg shadow-indigo-900/30"
-          >
-            <Zap className="w-4 h-4" />
-            <span>1. Analyze Track</span>
-          </button>
-        </div>
+        {gridReady && (
+          <div className="mt-3 text-xs text-slate-500">
+            Grid {GRID_SIZE}×{GRID_SIZE} · {intersections.length} intersections
+          </div>
+        )}
+      </div>
 
-        <div className="flex space-x-2">
-          {!isTraining ? (
-            <button
-              onClick={startTraining}
-              disabled={!startPoint || !finishPoint}
-              className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg text-sm font-medium transition-all shadow-lg shadow-emerald-900/30"
-            >
-              <Play className="w-4 h-4" />
-              <span>2. Train AI</span>
-            </button>
-          ) : (
-            <button
-              onClick={stopTraining}
-              className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-rose-600 hover:bg-rose-700 rounded-lg text-sm font-medium transition-all shadow-lg shadow-rose-900/30 animate-pulse"
-            >
-              <Square className="w-4 h-4" />
-              <span>Stop Training</span>
-            </button>
-          )}
-          <button
-            onClick={resetAgent}
-            disabled={isTraining}
-            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        </div>
-
+      {/* Step 3: Export */}
+      <div className={sectionCls}>
+        {stepTitle(3, "Export", "Generate Arduino code from the best learned route.")}
         <button
           onClick={generateIno}
-          disabled={isTraining || agentRef.current.bestActions.length === 0}
-          className="w-full flex items-center justify-center space-x-1 px-3 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-700 disabled:text-slate-400 rounded-lg text-sm font-medium transition-all shadow-lg shadow-cyan-900/30"
+          disabled={isTraining || !hasPolicy}
+          className={`${btnSecondary} w-full`}
         >
           <Download className="w-4 h-4" />
-          <span>3. Generate .ino from AI</span>
+          <span>Generate .ino</span>
         </button>
       </div>
 
       {/* Status */}
       {statusMsg && (
-        <div className="px-4 py-2 text-xs bg-slate-800 border-b border-slate-700">
-          <span className="text-cyan-400 font-mono">{statusMsg}</span>
+        <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-start gap-2">
+          {isTraining
+            ? <span className="mt-1 w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" />
+            : <Info className="w-3.5 h-3.5 mt-0.5 text-slate-400 flex-shrink-0" />}
+          <span className="text-xs text-slate-600 font-mono break-words">{statusMsg}</span>
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="px-4 py-3 grid grid-cols-2 gap-2 border-b border-slate-700">
-        <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-          <div className="text-xs text-slate-400 mb-1">Episodes</div>
-          <div className="text-xl font-bold text-white">{allStats.length}</div>
-        </div>
-        <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-          <div className="text-xs text-slate-400 mb-1">Best Reward</div>
-          <div className="text-xl font-bold text-emerald-400">{bestRewardDisplay}</div>
-        </div>
-        <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-          <div className="text-xs text-slate-400 mb-1">Avg Reward</div>
-          <div className="text-xl font-bold text-cyan-400">{avgReward}</div>
-        </div>
-        <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-          <div className="text-xs text-slate-400 mb-1">Finished</div>
-          <div className="text-xl font-bold text-purple-400">{finishedCount}</div>
-        </div>
-        <div className="bg-slate-800 rounded-lg p-3 border border-slate-700 col-span-2">
-          <div className="text-xs text-slate-400 mb-1">Q-Table States</div>
-          <div className="text-xl font-bold text-amber-400">{qTableSize}</div>
-        </div>
+      {/* Results */}
+      <div className={sectionCls}>
+        <div className={`${labelCls} mb-2`}>Results</div>
+        <dl className="grid grid-cols-3 rounded-md border border-slate-200 divide-x divide-slate-200">
+          {[
+            ['Episodes', allStats.length],
+            ['Finished', finishedCount],
+            ['Q-states', qTableSize],
+          ].map(([label, value]) => (
+            <div key={label} className="px-3 py-2">
+              <dt className="text-[11px] text-slate-500">{label}</dt>
+              <dd className="text-lg font-semibold text-slate-900 tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <dl className="grid grid-cols-2 mt-2 rounded-md border border-slate-200 divide-x divide-slate-200">
+          {[
+            ['Best reward', bestRewardDisplay],
+            ['Avg reward', avgReward],
+          ].map(([label, value]) => (
+            <div key={label} className="px-3 py-2">
+              <dt className="text-[11px] text-slate-500">{label}</dt>
+              <dd className="text-lg font-semibold text-slate-900 tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {/* Reward History */}
+        {allStats.length > 0 && (
+          <div className="mt-4">
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-xs font-medium text-slate-700">Reward history</span>
+              <span className="text-[11px] text-slate-400">last {recentStats.length} episodes</span>
+            </div>
+            <div className="h-20 flex items-end gap-px border-b border-slate-200">
+              {recentStats.map((s, i) => {
+                const height = Math.max(2, Math.abs(s.totalReward) / maxAbsReward * 100);
+                const isPositive = s.totalReward >= 0;
+                return (
+                  <div
+                    key={i}
+                    className={`flex-1 rounded-t-[1px] ${s.finished ? 'bg-blue-600' : isPositive ? 'bg-slate-400' : 'bg-red-300'}`}
+                    style={{ height: `${height}%` }}
+                    title={`Ep ${s.episode}: ${s.totalReward.toFixed(0)}${s.finished ? ' (finished)' : ''} WP:${s.waypointsCollected}`}
+                  />
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-4 mt-1.5 text-[11px] text-slate-500">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-600" />Finished</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-slate-400" />Positive</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-300" />Negative</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Action Counter — fungsi yang dipakai di episode saat ini (real-time sequential) */}
+      {/* Action log — actions used in the current episode (real-time sequential) */}
       {(isTraining || actionCounts.length > 0) && (
-        <div className="px-4 py-3 border-b border-slate-700">
-          <div className="text-xs text-slate-400 mb-2">
-            Actions {isTraining ? <span className="text-emerald-400">(Live — {actionCounts.length} steps)</span> : `(Last Episode — ${actionCounts.length} steps)`}
+        <div className={sectionCls}>
+          <div className="flex items-baseline justify-between mb-2">
+            <span className={labelCls}>{isTraining ? 'Current episode' : 'Last episode'}</span>
+            <span className="text-[11px] text-slate-400 tabular-nums">{actionCounts.length} steps</span>
           </div>
           <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
-            {actionCounts.map((name, i) => {
-              const colors: Record<string, string> = {
-                tright: 'bg-amber-600', tleft: 'bg-amber-600',
-                rl: 'bg-purple-600', ll: 'bg-purple-600',
-                rls: 'bg-fuchsia-600', lls: 'bg-fuchsia-600',
-                trigger_l: 'bg-cyan-600', trigger_r: 'bg-cyan-600', sac: 'bg-rose-600', ld: 'bg-teal-600',
-              };
-              return (
-                <span
-                  key={i}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono text-white ${colors[name] || 'bg-slate-600'}`}
-                >
-                  {name}
-                </span>
-              );
-            })}
+            {actionCounts.map((name, i) => (
+              <span key={i} className={chipCls}>{name}</span>
+            ))}
             {actionCounts.length === 0 && isTraining && (
-              <span className="text-xs text-slate-600 italic">Waiting for actions...</span>
+              <span className="text-xs text-slate-400">Waiting for actions…</span>
             )}
           </div>
         </div>
       )}
 
-      {/* Track Analysis */}
-      {gridReady && (
-        <div className="px-4 py-2 border-b border-slate-700">
-          <div className="flex items-center space-x-1 text-xs text-slate-400 mb-1">
-            <BarChart3 className="w-3 h-3" />
-            <span>Track Analysis</span>
-          </div>
-          <div className="text-xs text-slate-300">
-            Grid: {GRID_SIZE}×{GRID_SIZE} | Intersections: {intersections.length}
-          </div>
-        </div>
-      )}
-
-      {/* Reward History */}
-      {allStats.length > 0 && (
-        <div className="px-4 py-3 border-b border-slate-700">
-          <div className="text-xs text-slate-400 mb-2">Reward History (last 50 episodes)</div>
-          <div className="h-20 flex items-end space-x-px">
-            {allStats.slice(-50).map((s, i) => {
-              const maxR = Math.max(...allStats.slice(-50).map(x => Math.abs(x.totalReward)), 1);
-              const height = Math.max(2, Math.abs(s.totalReward) / maxR * 100);
-              const isPositive = s.totalReward >= 0;
-              return (
-                <div
-                  key={i}
-                  className={`flex-1 rounded-t-sm ${s.finished ? 'bg-yellow-400' : isPositive ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                  style={{ height: `${height}%`, opacity: 0.6 + (i / 50) * 0.4 }}
-                  title={`Ep ${s.episode}: ${s.totalReward.toFixed(0)}${s.finished ? ' ✅' : ''} WP:${s.waypointsCollected}`}
-                />
-              );
-            })}
-          </div>
-          <div className="flex items-center space-x-3 mt-1 text-[10px] text-slate-500">
-            <span className="flex items-center space-x-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block"></span><span>Positive</span></span>
-            <span className="flex items-center space-x-1"><span className="w-2 h-2 rounded-sm bg-rose-500 inline-block"></span><span>Negative</span></span>
-            <span className="flex items-center space-x-1"><span className="w-2 h-2 rounded-sm bg-yellow-400 inline-block"></span><span>Finished!</span></span>
-          </div>
-        </div>
-      )}
-
       {/* Best Actions Preview */}
-      {agentRef.current.bestActions.length > 0 && (
-        <div className="px-4 py-3 border-b border-slate-700">
-          <div className="text-xs text-slate-400 mb-2">
-            Best Episode Actions ({agentRef.current.bestActions.length} steps)
+      {hasPolicy && (
+        <div className={sectionCls}>
+          <div className="flex items-baseline justify-between mb-2">
+            <span className={labelCls}>Best episode</span>
+            <span className="text-[11px] text-slate-400 tabular-nums">{agentRef.current.bestActions.length} steps</span>
           </div>
           <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
             {agentRef.current.bestActions.slice(0, 30).map((a, i) => {
               const actionInfo = ACTIONS[a.actionId];
-              const colors: Record<string, string> = {
-                tright: 'bg-amber-600', tleft: 'bg-amber-600',
-                rl: 'bg-purple-600', ll: 'bg-purple-600',
-                rls: 'bg-fuchsia-600', lls: 'bg-fuchsia-600',
-                trigger_l: 'bg-cyan-600', trigger_r: 'bg-cyan-600', sac: 'bg-rose-600', ld: 'bg-teal-600',
-              };
               return (
-                <span
-                  key={i}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${colors[actionInfo.name] || 'bg-slate-600'}`}
-                  title={`State: ${a.state} → ${actionInfo.label}`}
-                >
+                <span key={i} className={chipCls} title={`State: ${a.state} → ${actionInfo.label}`}>
                   {actionInfo.name}
                 </span>
               );
             })}
             {agentRef.current.bestActions.length > 30 && (
-              <span className="text-xs text-slate-500">+{agentRef.current.bestActions.length - 30} more</span>
+              <span className="text-xs text-slate-400 self-center">+{agentRef.current.bestActions.length - 30} more</span>
             )}
           </div>
         </div>
       )}
 
       {/* Advanced Settings */}
-      <div className="px-4 py-2">
+      <div className="px-4 py-3">
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center space-x-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          className="flex w-full items-center justify-between text-sm font-medium text-slate-700 hover:text-slate-900"
         >
-          {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          <span>Advanced Settings</span>
+          <span className="flex items-center gap-2">
+            <SlidersHorizontal className="w-4 h-4 text-slate-400" />
+            Advanced settings
+          </span>
+          {showAdvanced ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
         </button>
         {showAdvanced && (
-          <div className="mt-2 space-y-2">
+          <div className="mt-3 space-y-2">
             {([
-              ['maxEpisodes', 'Max Episodes', 1, 5000],
-              ['maxStepsPerEpisode', 'Max Steps/Episode', 10, 1000],
-              ['alpha', 'Learning Rate (α)', 0.01, 1],
-              ['gamma', 'Discount Factor (γ)', 0, 1],
-              ['epsilonDecay', 'Epsilon Decay', 0.9, 1],
-              ['power', 'Motor Power', 50, 255],
+              ['maxEpisodes', 'Max episodes', 1, 5000],
+              ['maxStepsPerEpisode', 'Max steps / episode', 10, 1000],
+              ['alpha', 'Learning rate (α)', 0.01, 1],
+              ['gamma', 'Discount factor (γ)', 0, 1],
+              ['epsilonDecay', 'Epsilon decay', 0.9, 1],
+              ['power', 'Motor power', 50, 255],
             ] as [keyof typeof config, string, number, number][]).map(([key, label, min, max]) => (
               <label key={key} className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">{label}</span>
+                <span className="text-slate-600">{label}</span>
                 <input
                   type="number"
                   value={config[key]}
@@ -546,14 +538,13 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
                   step={key === 'alpha' || key === 'gamma' || key === 'epsilonDecay' ? 0.01 : 1}
                   onChange={(e) => setConfig(prev => ({ ...prev, [key]: Number(e.target.value) }))}
                   disabled={isTraining}
-                  className="w-20 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-right disabled:opacity-40"
+                  className="w-24 h-8 px-2 rounded-md border border-slate-300 bg-white text-right text-slate-800 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </label>
             ))}
           </div>
         )}
       </div>
-
     </div>
   );
 };
