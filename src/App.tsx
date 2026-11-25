@@ -6,6 +6,9 @@ import { CanvasRenderer, type CanvasRendererHandle } from './simulator/CanvasRen
 import { TrainingPanel } from './qlearning/TrainingPanel';
 import { useStore } from './store/useStore';
 
+// three.js is heavy: load the 3D view only when the user switches to 3D
+const Robot3DView = React.lazy(() => import('./simulator/Robot3DView'));
+
 function App() {
   const arduinoCode = useStore((state) => state.arduinoCode);
   const setArduinoCode = useStore((state) => state.setArduinoCode);
@@ -26,6 +29,10 @@ function App() {
   const [saveStatus, setSaveStatus] = React.useState('');
   const [mobileTab, setMobileTab] = React.useState<'editor' | 'simulator'>('editor');
   const [zoom, setZoom] = React.useState(1);
+  const [viewMode, setViewMode] = React.useState<'2d' | '3d'>('2d');
+  const getRobot = React.useCallback(() => canvasRendererRef.current?.getRobot() ?? null, []);
+  const getTrackCanvas = React.useCallback(() => canvasRendererRef.current?.getTrackCanvas() ?? null, []);
+  const setRobotPose = React.useCallback((x: number, y: number, angle: number) => canvasRendererRef.current?.setRobotPose(x, y, angle), []);
   const canvasRendererRef = React.useRef<CanvasRendererHandle>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -244,6 +251,18 @@ function App() {
                   <span className="text-xs text-slate-600">cm</span>
                 </div>
               )}
+              <div className="flex rounded border border-slate-300 overflow-hidden h-6 mr-2 shadow-sm">
+                {(['2d', '3d'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setViewMode(m)}
+                    className={`px-2 text-xs font-semibold uppercase transition-colors ${viewMode === m ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+                    title={m === '3d' ? '3D view with follow camera' : '2D top view (edit robot, draw, place points)'}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
               <select
                 value={activeTrack}
                 onChange={(e) => setActiveTrack(e.target.value as any)}
@@ -270,9 +289,16 @@ function App() {
               </button>
             </div>
           </div>
+          {viewMode === '3d' && (
+            <div className="absolute top-10 bottom-0 left-0 right-0 z-20 bg-slate-200">
+              <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading 3D view…</div>}>
+                <Robot3DView getRobot={getRobot} getTrackCanvas={getTrackCanvas} setRobotPose={setRobotPose} />
+              </React.Suspense>
+            </div>
+          )}
           <div className="absolute top-10 bottom-0 left-0 right-0 p-2 md:p-8 bg-slate-200 overflow-auto">
             {/* Zoom Controls */}
-            <div className="fixed md:absolute bottom-20 md:bottom-auto md:top-4 right-4 flex flex-col space-y-2 z-20">
+            <div className={`${viewMode === '3d' ? 'hidden' : 'flex'} fixed md:absolute bottom-20 md:bottom-auto md:top-4 right-4 flex-col space-y-2 z-20`}>
                <button onClick={()=>setZoom(z=>z+0.25)} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title="Zoom In">
                  <ZoomIn className="w-5 h-5"/>
                </button>

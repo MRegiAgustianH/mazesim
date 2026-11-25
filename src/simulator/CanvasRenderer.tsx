@@ -12,6 +12,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.j
 export interface CanvasRendererHandle {
     getTrackCanvas: () => HTMLCanvasElement | null;
     getRobot: () => Robot | null;
+    /** Move/rotate the robot while idle; also becomes the new start/reset pose. */
+    setRobotPose: (x: number, y: number, angle: number) => void;
 }
 
 export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
@@ -55,6 +57,16 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
     useImperativeHandle(ref, () => ({
         getTrackCanvas: () => trackCanvasRef.current,
         getRobot: () => robotRef.current,
+        setRobotPose: (x: number, y: number, angle: number) => {
+            const robot = robotRef.current;
+            if (!robot || robot._isSimulationRunning) return;
+            robot.x = x;
+            robot.y = y;
+            robot.angle = angle;
+            robot.lSpeed = 0;
+            robot.rSpeed = 0;
+            startPosRef.current = { x, y, angle };
+        },
     }));
 
     // Initialize Simulator
