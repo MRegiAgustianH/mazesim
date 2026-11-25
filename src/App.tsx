@@ -251,6 +251,8 @@ function App() {
                 <option value="loop">Track: Loop</option>
                 <option value="scurve">Track: S-Curve</option>
                 <option value="maze">Track: Maze Grid</option>
+                <option value="croc_junior">Track: CROC 2026 Junior (3×3 m)</option>
+                <option value="croc_senior">Track: CROC 2026 Senior (3×3 m)</option>
                 <option value="custom">Track: Custom (Draw)</option>
                 <option value="upload">Track: Upload Image/PDF</option>
               </select>

@@ -3,12 +3,14 @@ import type { ActionRecord } from '../qlearning/QLearningAgent';
 
 interface Point { x: number; y: number; }
 
+export type TrackId = 'loop' | 'scurve' | 'maze' | 'croc_junior' | 'croc_senior' | 'custom' | 'upload';
+
 interface AppState {
     arduinoCode: string;
     jsCode: string;
     workspaceXml: string | null;
     simulationState: 'idle' | 'running' | 'paused';
-    activeTrack: 'loop' | 'scurve' | 'maze' | 'custom' | 'upload';
+    activeTrack: TrackId;
     customTrackSrc: string | null;
     customTrackType: 'image' | 'pdf' | null;
     activeTrackWidthCm: number;
@@ -27,7 +29,7 @@ interface AppState {
     setJsCode: (code: string) => void;
     setWorkspaceXml: (xml: string) => void;
     setSimulationState: (state: 'idle' | 'running' | 'paused') => void;
-    setActiveTrack: (track: 'loop' | 'scurve' | 'maze' | 'custom' | 'upload') => void;
+    setActiveTrack: (track: TrackId) => void;
     setCustomTrackSrc: (src: string | null, type?: 'image' | 'pdf') => void;
     setActiveTrackWidthCm: (cm: number) => void;
     setActiveTrackHeightCm: (cm: number) => void;

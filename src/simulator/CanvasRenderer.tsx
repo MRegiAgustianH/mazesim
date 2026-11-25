@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { useStore } from '../store/useStore';
 import { Robot } from './Robot';
-import { drawTrack, MAZE_GRID } from './TrackPreset';
+import { drawTrack, MAZE_GRID, IMAGE_TRACKS, isImageTrack } from './TrackPreset';
 import { beep } from './beep';
 import { QLearningAgent } from '../qlearning/QLearningAgent';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -63,15 +63,16 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         if (!canvas) return;
 
         // Default start pos based on track
-        const startX = activeTrack === 'scurve' ? 100 : activeTrack === 'maze' ? MAZE_GRID.margin : 150;
-        const startY = activeTrack === 'scurve' ? canvas.height - 100 : activeTrack === 'maze' ? MAZE_GRID.margin : 150;
-        const startAngle = activeTrack === 'scurve' ? -Math.PI / 2 : 0;
+        const imageTrack = isImageTrack(activeTrack) ? IMAGE_TRACKS[activeTrack] : null;
+        const startX = imageTrack ? imageTrack.start.x : activeTrack === 'scurve' ? 100 : activeTrack === 'maze' ? MAZE_GRID.margin : 150;
+        const startY = imageTrack ? imageTrack.start.y : activeTrack === 'scurve' ? canvas.height - 100 : activeTrack === 'maze' ? MAZE_GRID.margin : 150;
+        const startAngle = imageTrack ? imageTrack.start.angle : activeTrack === 'scurve' ? -Math.PI / 2 : 0;
 
         // Calculate pixels per cm based on track dimensions and canvas size.
         // E.g. canvas is 800px. If track is 150x300cm, we need the largest dimension to fit 800px.
         // So pixelsPerCm = Math.min(800 / 150, 800 / 300) = 800 / 300 = 2.66
-        const trackPhysicalWidth = activeTrack === 'upload' ? activeTrackWidthCm : 150;
-        const trackPhysicalHeight = activeTrack === 'upload' ? activeTrackHeightCm : 150;
+        const trackPhysicalWidth = activeTrack === 'upload' ? activeTrackWidthCm : imageTrack ? imageTrack.sizeCm : 150;
+        const trackPhysicalHeight = activeTrack === 'upload' ? activeTrackHeightCm : imageTrack ? imageTrack.sizeCm : 150;
         const pixelsPerCm = Math.min(canvas.width / trackPhysicalWidth, canvas.height / trackPhysicalHeight);
         pixelsPerCmRef.current = pixelsPerCm;
 
@@ -131,6 +132,19 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                         console.error("Failed to render uploaded track", e);
                     }
 
+                } else if (imageTrack) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, trackCanvas.width, trackCanvas.height);
+                    try {
+                        const img = new Image();
+                        img.src = imageTrack.src;
+                        await img.decode();
+                        if (useStore.getState().activeTrack !== activeTrack) return; // switched meanwhile
+                        ctx.imageSmoothingQuality = 'high';
+                        ctx.drawImage(img, 0, 0, trackCanvas.width, trackCanvas.height);
+                    } catch (e) {
+                        console.error('Failed to load preset track', e);
+                    }
                 } else if (activeTrack !== 'upload') {
                     drawTrack(ctx, trackCanvas.width, trackCanvas.height, activeTrack as any, pixelsPerCm);
                 }

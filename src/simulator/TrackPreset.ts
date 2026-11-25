@@ -1,3 +1,16 @@
+import crocJuniorImg from '../../preset/CROC_JUNIOR_2026.webp';
+import crocSeniorImg from '../../preset/CROC_SENIOR_2026.webp';
+
+// Competition tracks drawn from images in /preset. Each image is square and
+// maps onto the full 800x800 canvas; `start` is in canvas px (robot centre,
+// just behind the START bar, facing up).
+export const IMAGE_TRACKS = {
+    croc_junior: { label: 'CROC 2026 Junior', src: crocJuniorImg, sizeCm: 300, start: { x: 697, y: 740, angle: -Math.PI / 2 } },
+    croc_senior: { label: 'CROC 2026 Senior', src: crocSeniorImg, sizeCm: 300, start: { x: 720, y: 755, angle: -Math.PI / 2 } },
+} as const;
+export type ImageTrackId = keyof typeof IMAGE_TRACKS;
+export const isImageTrack = (t: string): t is ImageTrackId => t in IMAGE_TRACKS;
+
 // Maze Grid preset geometry (canvas px, canvas is 800px = 150cm).
 // 6x6 boxes, each 110px (~20.6cm), robot starts at the top-left corner.
 export const MAZE_GRID = { margin: 70, cell: 110, cells: 6 } as const;
