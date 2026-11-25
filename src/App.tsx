@@ -149,7 +149,7 @@ function App() {
       <header className="flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-20 w-full relative gap-3 md:gap-0">
         <div className="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-start">
           <div className="flex items-center space-x-3">
-            <img src={logo} alt="MRB" className="w-9 h-9 rounded-md shadow-sm" />
+            <img src={logo} alt="X" className="w-9 h-9 rounded-md shadow-sm" />
             <h1 className="text-xl font-semibold text-slate-800">Simulator</h1>
           </div>
           <div className="flex rounded-md border border-slate-300 overflow-hidden h-8 text-xs font-semibold" role="group" aria-label={t('app.language')}>
