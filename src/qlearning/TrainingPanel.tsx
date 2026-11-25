@@ -117,6 +117,8 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
       robot.lSpeed = 0;
       robot.rSpeed = 0;
       robot.simTime = 0; // Reset simulated clock
+      robot.lineError = 0; // Reset line-trace PID memory
+      robot.lineErrorLast = 0;
 
       try {
         const stats = await agent.runEpisode(robot, ep + 1, waypoints, finishPoint);

@@ -391,6 +391,14 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
 
     // Mouse handlers for drawing custom tracks
     const getMousePos = (e: React.MouseEvent | React.TouchEvent) => {
+        if ('touches' in e) {
+            const t = e.touches[0] ?? e.changedTouches[0];
+            return clientToCanvas(t.clientX, t.clientY);
+        }
+        return clientToCanvas(e.clientX, e.clientY);
+    };
+
+    const clientToCanvas = (clientX: number, clientY: number) => {
         const canvas = canvasRef.current;
         if (!canvas) return { x: 0, y: 0 };
         const rect = canvas.getBoundingClientRect();
@@ -417,24 +425,50 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         const scaleX = canvas.width / displayWidth;
         const scaleY = canvas.height / displayHeight;
 
-        let clientX = 0;
-        let clientY = 0;
-        if ('touches' in e) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-        } else {
-            clientX = (e as React.MouseEvent).clientX;
-            clientY = (e as React.MouseEvent).clientY;
-        }
-
         return {
             x: (clientX - rect.left - offsetX) * scaleX,
             y: (clientY - rect.top - offsetY) * scaleY
         };
     };
 
+    // Mobile rotate: two-finger twist on the robot (desktop uses right-click drag)
+    const twistRef = useRef<{ startTouchAngle: number; startRobotAngle: number } | null>(null);
+    // True while a touch is moving/rotating the robot or drawing, so the browser
+    // must not scroll or pinch-zoom the page at the same time.
+    const touchGestureRef = useRef(false);
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const block = (ev: TouchEvent) => {
+            if (touchGestureRef.current && ev.cancelable) ev.preventDefault();
+        };
+        canvas.addEventListener('touchmove', block, { passive: false });
+        return () => canvas.removeEventListener('touchmove', block);
+    }, []);
+    const touchAngle = (e: React.TouchEvent) => {
+        const a = clientToCanvas(e.touches[0].clientX, e.touches[0].clientY);
+        const b = clientToCanvas(e.touches[1].clientX, e.touches[1].clientY);
+        return { angle: Math.atan2(b.y - a.y, b.x - a.x), a, b };
+    };
+    const isNearRobot = (x: number, y: number, margin = 50) =>
+        !!robotRef.current && Math.abs(x - robotRef.current.x) < margin && Math.abs(y - robotRef.current.y) < margin;
+
     const handleStartDraw = (e: React.MouseEvent | React.TouchEvent) => {
         if (simulationState === 'running') return;
+
+        // Second finger down: switch to rotate if the gesture is on/around the robot
+        if ('touches' in e && e.touches.length === 2 && robotRef.current) {
+            const { angle, a, b } = touchAngle(e);
+            const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            if (isDraggingRobot || isNearRobot(a.x, a.y, 80) || isNearRobot(b.x, b.y, 80) || isNearRobot(mid.x, mid.y, 80)) {
+                twistRef.current = { startTouchAngle: angle, startRobotAngle: robotRef.current.angle };
+                touchGestureRef.current = true;
+                setIsDrawing(false);
+                setIsDraggingRobot(false);
+                setIsRotatingRobot(true);
+            }
+            return;
+        }
 
         const { x, y } = getMousePos(e);
 
@@ -471,6 +505,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                 } else {
                     setIsDraggingRobot(true);
                 }
+                touchGestureRef.current = true;
                 return; // Don't draw
             }
         }
@@ -479,6 +514,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         if (activeTrack !== 'custom' || ('button' in e && e.button !== 0)) return;
 
         setIsDrawing(true);
+        touchGestureRef.current = true;
         const ctx = trackCanvasRef.current?.getContext('2d');
         if (ctx) {
             ctx.beginPath();
@@ -488,6 +524,16 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
 
     const handleDraw = (e: React.MouseEvent | React.TouchEvent) => {
         if (simulationState === 'running') return;
+
+        if (twistRef.current && 'touches' in e && e.touches.length === 2 && robotRef.current) {
+            const { angle } = touchAngle(e);
+            robotRef.current.angle = twistRef.current.startRobotAngle + (angle - twistRef.current.startTouchAngle);
+            robotRef.current.lSpeed = 0;
+            robotRef.current.rSpeed = 0;
+            return;
+        }
+        if (twistRef.current) return; // one finger lifted mid-twist: ignore until all fingers up
+
         const { x, y } = getMousePos(e);
 
         if (isRotatingRobot && robotRef.current) {
@@ -522,7 +568,11 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         }
     };
 
-    const handleEndDraw = () => {
+    const handleEndDraw = (e?: React.MouseEvent | React.TouchEvent) => {
+        // Keep rotating while at least one finger of a twist is still down
+        if (e && 'touches' in e && e.touches.length > 0 && twistRef.current) return;
+        twistRef.current = null;
+        touchGestureRef.current = false;
         // Hanya update startPos bila user benar-benar drag/rotate robot.
         // Sebelumnya startPosRef tertimpa pada setiap mouseUp idle (termasuk klik
         // biasa di canvas setelah simulate) -> Reset pakai posisi salah. (bugfix)

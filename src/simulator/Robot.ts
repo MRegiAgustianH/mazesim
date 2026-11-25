@@ -65,6 +65,8 @@ export class Robot {
         this.simTime = 0;
         this.lSpeed = 0;
         this.rSpeed = 0;
+        this.lineError = 0;
+        this.lineErrorLast = 0;
         this._tickResolve = null; // abandon pending tick from a stopped run
         this.runId++; // invalidate any stale runner suspended in sleep()
     }
@@ -430,26 +432,47 @@ export class Robot {
         }
     }
 
+    // Port of mrbMaze42::lineTrace (firmware). Error comes from a fixed table of
+    // narrow sensor patterns (1-2 adjacent sensors). Any other pattern, such as
+    // 3+ sensors at an intersection/branch or no line at all, KEEPS the previous
+    // error, so the robot passes junctions straight instead of being pulled
+    // toward the side branch (which a weighted average over all active
+    // sensors would do).
+    static readonly ERROR_TABLE: Record<string, number> = {
+        '00011000': 0,
+        '00010000': 1, '00001000': -1,
+        '00110000': 2, '00001100': -2,
+        '00100000': 3, '00000100': -3,
+        '01100000': 4, '00000110': -4,
+        '01000000': 5, '00000010': -5,
+        '11000000': 6, '00000011': -6,
+        '10000000': 7, '00000001': -7,
+    };
+    // Same gains as the generated Arduino code: my.pidSet(28, 8, 8)
+    static readonly KP = 28;
+    static readonly KI = 8;
+    static readonly KD = 8;
+    lineError: number = 0;
+    lineErrorLast: number = 0;
+
     async lineTraceTick(power: number) {
         this.readSensors();
-        let error = 0;
-        let sum = 0;
-        const weights = [-4, -3, -2, -1, 1, 2, 3, 4];
 
-        for (let i = 0; i < 8; i++) {
-            error += this.sensors[i] * weights[i];
-            sum += this.sensors[i];
-        }
+        const mapped = Robot.ERROR_TABLE[this.sensors.join('')];
+        if (mapped !== undefined) this.lineError = mapped;
+        const error = this.lineError;
+        const last = this.lineErrorLast;
 
-        if (sum > 0) {
-            error = error / sum;
-        }
+        const scale = power / 250;
+        const pid = Robot.KP * scale * error
+            + Robot.KI * scale * (error + last)
+            + Robot.KD * scale * (error - last);
 
-        const kp = power * 0.5; // Simple Kp tuned for general tracing
-        const turn = error * kp;
-
-        this.lSpeed = power + turn;
-        this.rSpeed = power - turn;
+        // Positive error = line on the LEFT -> slow down the left wheel.
+        // Like the firmware, wheel speed is capped at `power` (never boosted).
+        this.lSpeed = Math.min(power - pid, power);
+        this.rSpeed = Math.min(power + pid, power);
+        this.lineErrorLast = error;
         await this.waitForTick();
     }
     // mengedipkan led pada sensor 1x (disimulasikan dengan delay sesaat)
