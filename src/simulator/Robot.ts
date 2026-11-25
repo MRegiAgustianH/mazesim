@@ -1,20 +1,49 @@
+import { drawRobotBody, type Draw2DOptions } from './robotDraw2D';
+import type { PartId } from './robotLayout';
+
 export class Robot {
+    // Robot speed in cm/s for each unit of motor power (PWM 0-255)
+    static readonly CM_PER_SEC_PER_PWM = 0.9;
+    // Motors don't change speed instantly: each wheel approaches the commanded
+    // speed with this time constant (and keeps rolling briefly after a stop)
+    static readonly MOTOR_TAU = 0.035; // seconds
+    // Control loops (line trace, turns, junctions) step the physics in small
+    // increments, like the firmware's ~2 ms loop, so a fast spin can't jump
+    // over the line between two sensor reads.
+    static readonly CONTROL_DT = 0.005; // seconds
+    static readonly TICK_UNIT = 0.016; // actionTicks are counted in 16 ms units
     x: number;
     y: number;
     angle: number; // in radians
 
-    // Base physical dimensions in CM
+    // Real robot: 18.5 x 18.5 cm overall. The wheel axle is at the rear, so the
+    // robot pivots there and the sensors sit far ahead of it.
     readonly PHYSICAL_WIDTH_CM = 18.5;
     readonly PHYSICAL_HEIGHT_CM = 18.5;
+    readonly SENSOR_FORWARD_CM = 14.5; // axle -> foremost sensors
+    readonly WHEEL_TRACK_CM = 16.5; // distance between the two tyre centres
 
-    // Pixel rendered dimensions
+    // Pixel dimensions
     width: number;
     height: number;
+    sensorForward: number;
+    wheelTrack: number;
     sensorSpacing: number;
     speedScale: number;
 
+    // Commanded motor power (what the program asks for)
     lSpeed: number = 0;
     rSpeed: number = 0;
+    // Actual wheel speed in the same units, lagging behind the command
+    wheelL: number = 0;
+    wheelR: number = 0;
+    motorPower: boolean = true; // MOTOR switch: off = the wheels get no power
+    manualDrive: boolean = false; // speed-test menu drives the robot outside a program run
+
+    // Visual only: distance rolled by each wheel (cm) and the Nano's pin-13 LED
+    wheelPhaseL: number = 0;
+    wheelPhaseR: number = 0;
+    ledOn: boolean = false;
 
     sensors: number[] = [0, 0, 0, 0, 0, 0, 0, 0];
     ctx: CanvasRenderingContext2D | null = null;
@@ -23,6 +52,7 @@ export class Robot {
 
     _isSimulationRunning: boolean = false;
     _tickResolve: (() => void) | null = null;
+    tickBudget: number = 0; // real time (s) the control loop may still simulate before the next frame
     fastMode: boolean = false;
     simTime: number = 0;
     actionTicks: number = 0;
@@ -43,13 +73,16 @@ export class Robot {
         // Scale the robot to match track physics
         this.width = this.PHYSICAL_WIDTH_CM * pixelsPerCm;
         this.height = this.PHYSICAL_HEIGHT_CM * pixelsPerCm;
+        this.sensorForward = this.SENSOR_FORWARD_CM * pixelsPerCm;
+        this.wheelTrack = this.WHEEL_TRACK_CM * pixelsPerCm;
 
-        // Sensor spacing roughly covers the front width (18.5cm) across 8 sensors
-        // Assuming about 1.5cm between each sensor
+        // About 1.5 cm between neighbouring sensors
         this.sensorSpacing = 1.5 * pixelsPerCm;
 
-        // Base velocity mapped to physics scaling
-        this.speedScale = pixelsPerCm * 0.7; // ~0.7 cm per millisecond per unit of PWM
+        // Speed per PWM unit, calibrated on the real robot: at power 100 a
+        // junction step of 120 ms puts the wheel axle on the crossing
+        // (~14 cm past the point where the sensors see it).
+        this.speedScale = pixelsPerCm * Robot.CM_PER_SEC_PER_PWM;
     }
 
     setContext(ctx: CanvasRenderingContext2D) {
@@ -67,20 +100,35 @@ export class Robot {
         this.rSpeed = 0;
         this.lineError = 0;
         this.lineErrorLast = 0;
+        this.wheelL = 0;
+        this.wheelR = 0;
+        this.manualDrive = false;
         this._tickResolve = null; // abandon pending tick from a stopped run
+        this.tickBudget = 0;
         this.runId++; // invalidate any stale runner suspended in sleep()
     }
 
+    // Stop dead (used when the robot is picked up and placed)
+    stopWheels() {
+        this.lSpeed = this.rSpeed = 0;
+        this.wheelL = this.wheelR = 0;
+    }
+
     update(dt: number) {
-        if (!this._isSimulationRunning) return;
+        if (!this._isSimulationRunning && !this.manualDrive) return;
+
+        // Motor inertia: first-order lag toward the commanded power
+        const k = 1 - Math.exp(-dt / Robot.MOTOR_TAU);
+        this.wheelL += ((this.motorPower ? this.lSpeed : 0) - this.wheelL) * k;
+        this.wheelR += ((this.motorPower ? this.rSpeed : 0) - this.wheelR) * k;
 
         // Kinematics for differential drive
         // lSpeed and rSpeed are mapped from PWM (0-255). 
         // We scale them to match physical robot velocity vs ms delay.
-        const vL = this.lSpeed * this.speedScale;
-        const vR = this.rSpeed * this.speedScale;
+        const vL = this.wheelL * this.speedScale;
+        const vR = this.wheelR * this.speedScale;
 
-        const wheelDistance = this.width; // distance between wheels
+        const wheelDistance = this.wheelTrack;
 
         const v = (vL + vR) / 2;
         // In Canvas (+Y is down), positive angle rotation is Clockwise (Right). 
@@ -90,14 +138,30 @@ export class Robot {
         this.x += v * Math.cos(this.angle) * dt;
         this.y += v * Math.sin(this.angle) * dt;
         this.angle += omega * dt;
+        this.wheelPhaseL += (vL * dt) / this.pixelsPerCm;
+        this.wheelPhaseR += (vR * dt) / this.pixelsPerCm;
 
         if (this.fastMode) {
             this.simTime += dt * 1000;
         }
+    }
 
+    // Called once per animation frame. While a control loop is running it moves
+    // the robot itself (see waitForTick), so the frame only hands it the
+    // elapsed time; otherwise (motor() + delay) the frame moves the robot.
+    frame(dt: number) {
+        if (!this._isSimulationRunning) {
+            if (this.manualDrive) this.update(dt);
+            return;
+        }
         if (this._tickResolve) {
-            this._tickResolve();
+            this.tickBudget = Math.min(this.tickBudget + dt, 0.1);
+            const resolve = this._tickResolve;
             this._tickResolve = null;
+            resolve();
+        } else {
+            this.tickBudget = 0;
+            this.update(dt);
         }
     }
 
@@ -107,12 +171,31 @@ export class Robot {
         // Outer sensors are pushed back to form the curve.
         const pullbacks = [1.5, 0.7, 0.0, 0.4, 0.4, 0.0, 0.7, 1.5]; // unit in cm
         const pullbackPx = pullbacks[i] * this.pixelsPerCm;
-        const forwardX = this.height / 2 - pullbackPx;
+        const forwardX = this.sensorForward - pullbackPx;
 
         const offsetFromCenter = i - 3.5;
         const rightY = offsetFromCenter * this.sensorSpacing;
 
         return { forwardX, rightY };
+    }
+
+    // Emulated analogRead() of each sensor (0-999, like mrbMaze44's clamp):
+    // a dark floor reflects little light, so the reading is high.
+    readAnalog(): number[] {
+        const out: number[] = [];
+        for (let i = 0; i < 8; i++) {
+            const pos = this.getSensorLocalPosition(i);
+            const gx = this.x + pos.forwardX * Math.cos(this.angle) - pos.rightY * Math.sin(this.angle);
+            const gy = this.y + pos.forwardX * Math.sin(this.angle) + pos.rightY * Math.cos(this.angle);
+            let sum = 765;
+            if (this.ctx) {
+                const px = this.ctx.getImageData(gx, gy, 1, 1).data;
+                sum = px[0] + px[1] + px[2];
+            }
+            const noise = Math.round((Math.random() - 0.5) * 12);
+            out.push(Math.max(0, Math.min(999, Math.round(90 + ((765 - sum) / 765) * 760) + noise)));
+        }
+        return out;
     }
 
     readSensors() {
@@ -144,80 +227,22 @@ export class Robot {
         }
     }
 
-    draw(ctx: CanvasRenderingContext2D) {
+    draw(ctx: CanvasRenderingContext2D, highlight: PartId | null = null, extras: Pick<Draw2DOptions, 'oled' | 'powerOn' | 'motorOn'> = {}) {
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.rotate(this.angle + Math.PI / 2);
-
-        const bodyColor = '#0f766e'; // sketch green/blue PCB color
-        const wheelColor = '#be123c'; // red wheels from photo
-        const battColor = '#dc2626'; // battery red color
-        const stemColor = '#e2e8f0'; // white neck
-        const headColor = '#1e3a8a'; // dark blue for sensor head
-
-        // The main chassis is around 45% of the full sensor width
-        const bodyWidth = this.width * 0.45;
-        const bodyHeight = this.height * 0.35;
-        // Make wheels scale relative to body width
-        const wheelWidth = this.width * 0.12;
-        const wheelHeight = bodyHeight * 0.95;
-
-        // Scale gaps relative to overall width
-        const wheelGap = this.width * 0.02;
-
-        // Draw wheels (Red like photo)
-        ctx.fillStyle = wheelColor;
-        ctx.beginPath();
-        if (ctx.roundRect) {
-            ctx.roundRect(-bodyWidth / 2 - wheelWidth - wheelGap, -wheelHeight / 2, wheelWidth, wheelHeight, wheelWidth * 0.2);
-            ctx.roundRect(bodyWidth / 2 + wheelGap, -wheelHeight / 2, wheelWidth, wheelHeight, wheelWidth * 0.2);
-        } else {
-            ctx.fillRect(-bodyWidth / 2 - wheelWidth - wheelGap, -wheelHeight / 2, wheelWidth, wheelHeight);
-            ctx.fillRect(bodyWidth / 2 + wheelGap, -wheelHeight / 2, wheelWidth, wheelHeight);
-        }
-        ctx.fill();
-
-        // Draw main chassis (rear body around battery/wheels)
-        ctx.fillStyle = bodyColor;
-        ctx.beginPath();
-        if (ctx.roundRect) {
-            ctx.roundRect(-bodyWidth / 2, -bodyHeight / 2, bodyWidth, bodyHeight, bodyWidth * 0.1);
-        } else {
-            ctx.fillRect(-bodyWidth / 2, -bodyHeight / 2, bodyWidth, bodyHeight);
-        }
-        ctx.fill();
-
-        // Draw battery pack area (reddish) inside main chassis
-        ctx.fillStyle = battColor;
-        const battWidth = bodyWidth * 0.6;
-        const battHeight = bodyHeight * 0.6;
-        ctx.fillRect(-battWidth / 2, -battHeight * 0.2, battWidth, battHeight);
-
-        // Draw central stem (leher putih datar) connecting battery to the front sensor bar
-        ctx.fillStyle = stemColor;
-        const stemWidth = bodyWidth * 0.25;
-        // In canvas, UP is -Y. From center of battery, UP to the sensor array.
-        const stemStartY = -battHeight * 0.2;
-        const stemEndY = -this.height * 0.45;
-        ctx.fillRect(-stemWidth / 2, stemEndY, stemWidth, stemStartY - stemEndY);
-
-        // Draw sensor bar (kepala biru tua melengkung)
-        ctx.strokeStyle = headColor;
-        // Scale stroke thickness based on height
-        ctx.lineWidth = this.height * 0.18;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        for (let i = 0; i < 8; i++) {
-            const pos = this.getSensorLocalPosition(i);
-            const canvasX = pos.rightY;
-            // Shift up slightly relative to thickness so dots stay inside
-            const canvasY = -pos.forwardX + (this.height * 0.02);
-            if (i === 0) ctx.moveTo(canvasX, canvasY);
-            else ctx.lineTo(canvasX, canvasY);
-        }
-        ctx.stroke();
-
+        ctx.rotate(this.angle);
+        drawRobotBody(ctx, {
+            ppc: this.pixelsPerCm,
+            sensors: Array.from({ length: 8 }, (_, i) => {
+                const p = this.getSensorLocalPosition(i);
+                return { f: p.forwardX / this.pixelsPerCm, s: p.rightY / this.pixelsPerCm };
+            }),
+            wheelPhaseL: this.wheelPhaseL,
+            wheelPhaseR: this.wheelPhaseR,
+            highlight,
+            ledOn: this.ledOn,
+            ...extras,
+        });
         ctx.restore(); // Exit local rotation space
 
         // To make the visual debugging dots match the global raycast coordinates exactly,
@@ -295,16 +320,17 @@ export class Robot {
     }
 
     waitForTick(): Promise<void> {
-        this.actionTicks++;
+        this.actionTicks += Robot.CONTROL_DT / Robot.TICK_UNIT;
         if (this.isTrainingMode && this.actionTicks > 1500) {
             // ponytail: graceful timeout (flag, bukan throw) supaya episode tetap dapat Q-update
             this.actionTimedOut = true;
             return Promise.resolve();
         }
-        if (this.fastMode) {
-            this.update(0.016);
-            return Promise.resolve();
-        }
+        this.update(Robot.CONTROL_DT);
+        if (this.fastMode) return Promise.resolve();
+        // Keep pace with the wall clock: run steps until this frame's time is used up
+        this.tickBudget -= Robot.CONTROL_DT;
+        if (this.tickBudget > 0) return Promise.resolve();
         return new Promise(resolve => {
             this._tickResolve = resolve;
         });
@@ -333,7 +359,12 @@ export class Robot {
         this.lSpeed = lSpeed;
         this.rSpeed = rSpeed;
         if (delay > 0) {
-            await this.sleep(delay);
+            this.ledOn = true; // firmware lights pin 13 while motor() runs
+            try {
+                await this.sleep(delay);
+            } finally {
+                this.ledOn = false;
+            }
             this.lSpeed = 0;
             this.rSpeed = 0;
         }
@@ -476,7 +507,11 @@ export class Robot {
         await this.waitForTick();
     }
     // mengedipkan led pada sensor 1x (disimulasikan dengan delay sesaat)
-    async blink() { await this.checkStop(); await this.sleep(100); }
+    async blink() {
+        await this.checkStop();
+        this.ledOn = true;
+        try { await this.sleep(100); } finally { this.ledOn = false; }
+    }
 
     // (line delay) mengikuti garis selama waktu yang ditentukan
     async ld(power: number, delay: number) {

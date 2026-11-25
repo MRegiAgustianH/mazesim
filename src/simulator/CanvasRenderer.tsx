@@ -1,13 +1,16 @@
+import { robotUi } from '../oled/robotUi';
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { useStore } from '../store/useStore';
 import { Robot } from './Robot';
 import { drawTrack, MAZE_GRID, IMAGE_TRACKS, isImageTrack } from './TrackPreset';
 import { beep } from './beep';
 import { QLearningAgent } from '../qlearning/QLearningAgent';
-import * as pdfjsLib from 'pdfjs-dist';
+import { tr } from '../i18n/i18n';
 
-// Configure the worker for PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// The track canvas is read back every frame (sensors), so keep it in CPU memory
+const TRACK_CTX: CanvasRenderingContext2DSettings = { willReadFrequently: true };
+// Tells the 3D view to re-upload the track texture
+const notifyTrack = () => window.dispatchEvent(new Event('track-updated'));
 
 export interface CanvasRendererHandle {
     getTrackCanvas: () => HTMLCanvasElement | null;
@@ -63,8 +66,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             robot.x = x;
             robot.y = y;
             robot.angle = angle;
-            robot.lSpeed = 0;
-            robot.rSpeed = 0;
+            robot.stopWheels();
             startPosRef.current = { x, y, angle };
         },
     }));
@@ -93,8 +95,8 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
 
         const renderTrack = async () => {
             const trackCanvas = trackCanvasRef.current;
-            if (trackCanvas && trackCanvas.getContext('2d')) {
-                const ctx = trackCanvas.getContext('2d')!;
+            if (trackCanvas && trackCanvas.getContext('2d', TRACK_CTX)) {
+                const ctx = trackCanvas.getContext('2d', TRACK_CTX)!;
                 if (activeTrack === 'custom') {
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, trackCanvas.width, trackCanvas.height);
@@ -107,6 +109,9 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                         ctx.fillRect(0, 0, trackCanvas.width, trackCanvas.height);
 
                         if (customTrackType === 'pdf') {
+                            // pdf.js is large: load it only when a PDF track is used
+                            const pdfjsLib = await import('pdfjs-dist');
+                            pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
                             const loadingTask = pdfjsLib.getDocument(customTrackSrc);
                             const pdf = await loadingTask.promise;
                             const page = await pdf.getPage(1);
@@ -161,6 +166,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                     drawTrack(ctx, trackCanvas.width, trackCanvas.height, activeTrack as any, pixelsPerCm);
                 }
                 robotRef.current!.setContext(ctx);
+                notifyTrack();
             }
         };
 
@@ -181,18 +187,30 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         const dt = (time - lastTimeRef.current) / 1000;
         lastTimeRef.current = time;
 
+        const st = useStore.getState();
+        robotUi.tick(Number.isFinite(dt) ? Math.min(Math.max(dt, 0), 0.1) : 0, robotRef.current);
+
+        if (st.viewMode === '3d') {
+            if (!robotRef.current.fastMode) robotRef.current.frame(Math.min(dt, 0.1));
+            robotRef.current.readSensors(); // sensor LEDs + sensor strip
+            animationRef.current = requestAnimationFrame(draw);
+            return;
+        }
+
         // Clear and draw track from offscreen canvas
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         ctx.drawImage(trackCanvas, 0, 0);
 
-        // Update and draw robot
+        // Update and draw robot (Learn tab highlights the selected hardware part)
+        const highlight = st.editorMode === 'learn' ? st.highlightPart : null;
+        const extras = { oled: robotUi.canvas, powerOn: st.robotPower, motorOn: st.motorPower };
         if (robotRef.current.fastMode) {
             // In fast training mode, do not run standard updates in game loop
             // to avoid conflicts with background calculations. We just draw the robot's current position.
-            robotRef.current.draw(ctx);
+            robotRef.current.draw(ctx, highlight, extras);
         } else {
-            robotRef.current.update(Math.min(dt, 0.1)); // cap dt to prevent huge jumps
-            robotRef.current.draw(ctx);
+            robotRef.current.frame(Math.min(dt, 0.1)); // cap dt to prevent huge jumps
+            robotRef.current.draw(ctx, highlight, extras);
         }
 
         // Draw Start Point marker (green flag)
@@ -289,7 +307,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             ctx.fillStyle = isCollected ? '#fff' : '#000';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(isCollected ? 'âœ“' : `${i + 1}`, wp.x, wp.y);
+            ctx.fillText(isCollected ? '✓' : `${i + 1}`, wp.x, wp.y);
             // Label
             ctx.font = 'bold 9px sans-serif';
             ctx.fillStyle = isCollected ? '#22c55e' : '#f59e0b';
@@ -306,7 +324,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             ctx.textAlign = 'center';
             const colors: Record<string, string> = { start: '#22c55e', finish: '#ef4444', waypoint: '#f59e0b' };
             ctx.fillStyle = colors[pm] || '#fff';
-            ctx.fillText(`Click to place ${pm.toUpperCase()} point`, 400, 30);
+            ctx.fillText(tr('tr.placeHint', { kind: tr(`tr.kind.${pm}` as Parameters<typeof tr>[0]) }), 400, 30);
             ctx.restore();
         }
 
@@ -318,8 +336,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         if (simulationState !== 'running' || !robotRef.current) {
             if (robotRef.current) {
                 robotRef.current._isSimulationRunning = false;
-                robotRef.current.lSpeed = 0;
-                robotRef.current.rSpeed = 0;
+                robotRef.current.stopWheels();
             }
             return;
         }
@@ -398,10 +415,11 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         const handleClear = () => {
             const trackCanvas = trackCanvasRef.current;
             if (trackCanvas && activeTrack === 'custom') {
-                const ctx = trackCanvas.getContext('2d');
+                const ctx = trackCanvas.getContext('2d', TRACK_CTX);
                 if (ctx) {
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, trackCanvas.width, trackCanvas.height);
+                    notifyTrack();
                 }
             }
         };
@@ -415,8 +433,8 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
 
             robotRef.current = new Robot(startX, startY, startAngle, pixelsPerCmRef.current);
             const trackCanvas = trackCanvasRef.current;
-            if (trackCanvas && trackCanvas.getContext('2d')) {
-                robotRef.current.setContext(trackCanvas.getContext('2d')!);
+            if (trackCanvas && trackCanvas.getContext('2d', TRACK_CTX)) {
+                robotRef.current.setContext(trackCanvas.getContext('2d', TRACK_CTX)!);
             }
             // Main rAF loop (started in the init effect) already renders every
             // frame, so we don't call draw() here — that would spawn a duplicate
@@ -558,7 +576,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
 
         setIsDrawing(true);
         touchGestureRef.current = true;
-        const ctx = trackCanvasRef.current?.getContext('2d');
+        const ctx = trackCanvasRef.current?.getContext('2d', TRACK_CTX);
         if (ctx) {
             ctx.beginPath();
             ctx.moveTo(x, y);
@@ -571,8 +589,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         if (twistRef.current && 'touches' in e && e.touches.length === 2 && robotRef.current) {
             const { angle } = touchAngle(e);
             robotRef.current.angle = twistRef.current.startRobotAngle + (angle - twistRef.current.startTouchAngle);
-            robotRef.current.lSpeed = 0;
-            robotRef.current.rSpeed = 0;
+            robotRef.current.stopWheels();
             return;
         }
         if (twistRef.current) return; // one finger lifted mid-twist: ignore until all fingers up
@@ -584,8 +601,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             const dy = y - robotRef.current.y;
             // Calculate angle towards mouse
             robotRef.current.angle = Math.atan2(dy, dx);
-            robotRef.current.lSpeed = 0;
-            robotRef.current.rSpeed = 0;
+            robotRef.current.stopWheels();
             return;
         }
 
@@ -593,14 +609,13 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             robotRef.current.x = x;
             robotRef.current.y = y;
             // Clear physics speeds so it doesn't run away immediately upon drop if there was residual momentum
-            robotRef.current.lSpeed = 0;
-            robotRef.current.rSpeed = 0;
+            robotRef.current.stopWheels();
             return;
         }
 
         if (!isDrawing || activeTrack !== 'custom') return;
 
-        const ctx = trackCanvasRef.current?.getContext('2d');
+        const ctx = trackCanvasRef.current?.getContext('2d', TRACK_CTX);
         if (ctx) {
             ctx.lineWidth = 2.0 * pixelsPerCmRef.current;
             ctx.lineCap = 'round';
@@ -608,6 +623,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             ctx.strokeStyle = '#222';
             ctx.lineTo(x, y);
             ctx.stroke();
+            notifyTrack();
         }
     };
 

@@ -3,6 +3,7 @@ import { QLearningAgent, DEFAULT_CONFIG, ACTIONS } from './QLearningAgent';
 import type { TrainingStats } from './QLearningAgent';
 import { convertTrackToGrid, GRID_SIZE, type Intersection } from './TrackGridConverter';
 import { useStore } from '../store/useStore';
+import { useT, tr, type TKey, type TVars } from '../i18n/i18n';
 import { Play, Square, Download, RotateCcw, ChevronDown, ChevronUp, MapPin, Flag, Plus, Trash2, Check, Info, ScanLine, MousePointerClick, SlidersHorizontal } from 'lucide-react';
 
 interface TrainingPanelProps {
@@ -21,7 +22,9 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
   const [gridReady, setGridReady] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
-  const [statusMsg, setStatusMsg] = useState('');
+  const [status, setStatus] = useState<{ key: TKey; vars?: TVars } | null>(null);
+  const setStatusMsg = (key: TKey, vars?: TVars) => setStatus({ key, vars });
+  const t = useT();
   const startPosRef = useRef<{ x: number; y: number; angle: number } | null>(null);
 
   const startPoint = useStore(state => state.startPoint);
@@ -39,14 +42,14 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
   // Analisis track
   const analyzeTrack = useCallback(() => {
     const trackCanvas = trackCanvasRef.current;
-    if (!trackCanvas) { setStatusMsg('Error: Track canvas not found'); return; }
-    const ctx = trackCanvas.getContext('2d');
-    if (!ctx) { setStatusMsg('Error: Canvas context not found'); return; }
+    if (!trackCanvas) { setStatusMsg('tr.msg.noCanvas'); return; }
+    const ctx = trackCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) { setStatusMsg('tr.msg.noCtx'); return; }
 
     const { grid, intersections } = convertTrackToGrid(ctx);
     setIntersections(intersections);
     setGridReady(true);
-    setStatusMsg(`Track analyzed: ${GRID_SIZE}×${GRID_SIZE} grid, ${intersections.length} intersections found`);
+    setStatusMsg('tr.msg.analyzed', { n: GRID_SIZE, k: intersections.length });
     console.log('Grid Matrix:', grid);
     console.log('Intersections:', intersections);
   }, [trackCanvasRef]);
@@ -54,9 +57,9 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
   // Start training: Start → Waypoints → Finish
   const startTraining = useCallback(async () => {
     const robot = robotRef.current;
-    if (!robot) { setStatusMsg('Error: Robot not initialized'); return; }
-    if (!startPoint) { setStatusMsg('Set the Start point first.'); return; }
-    if (!finishPoint) { setStatusMsg('Set the Finish point first.'); return; }
+    if (!robot) { setStatusMsg('tr.msg.noRobot'); return; }
+    if (!startPoint) { setStatusMsg('tr.msg.needStart'); return; }
+    if (!finishPoint) { setStatusMsg('tr.msg.needFinish'); return; }
 
     startPosRef.current = { x: robot.x, y: robot.y, angle: robot.angle };
 
@@ -88,7 +91,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     }
 
     setIsTraining(true);
-    setStatusMsg(`Training started. Route: Start → ${waypoints.length} waypoint(s) → Finish`);
+    setStatusMsg('tr.msg.started', { n: waypoints.length });
 
     robot._isSimulationRunning = true;
     robot.isTrainingMode = true;
@@ -129,18 +132,14 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
           if (ep % 20 === 0 || ep === config.maxEpisodes - 1) {
             setAllStats([...tempStats]);
             const wpInfo = waypoints.length > 0 ? ` | WP: ${stats.waypointsCollected}/${waypoints.length + 1}` : '';
-            setStatusMsg(
-              `Training: Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ε: ${stats.epsilon.toFixed(3)}${stats.finished ? ' | Finished' : ''}`
-            );
+            setStatusMsg('tr.msg.progress', { ep: ep + 1, max: config.maxEpisodes, reward: stats.totalReward.toFixed(0), steps: stats.steps, wp: wpInfo, eps: stats.epsilon.toFixed(3), done: stats.finished ? tr('tr.msg.doneTag') : '' });
             // Yield control to the browser to prevent freezing and show progress
             await new Promise(r => setTimeout(r, 0));
           }
         } else {
           setAllStats(prev => [...prev, stats]);
           const wpInfo = waypoints.length > 0 ? ` | WP: ${stats.waypointsCollected}/${waypoints.length + 1}` : '';
-          setStatusMsg(
-            `Ep ${ep + 1}/${config.maxEpisodes} | Reward: ${stats.totalReward.toFixed(0)} | Steps: ${stats.steps}${wpInfo} | ε: ${stats.epsilon.toFixed(3)}${stats.finished ? ' | Finished' : ''}`
-          );
+          setStatusMsg('tr.msg.progress', { ep: ep + 1, max: config.maxEpisodes, reward: stats.totalReward.toFixed(0), steps: stats.steps, wp: wpInfo, eps: stats.epsilon.toFixed(3), done: stats.finished ? tr('tr.msg.doneTag') : '' });
         }
       } catch (e) {
         console.log('Training episode error:', e);
@@ -168,9 +167,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
 
     setBestActions(agent.bestActions);
     const finishedCount = agent.stats.filter(s => s.finished).length;
-    setStatusMsg(
-      `Training complete! ${agent.stats.length} episodes, ${finishedCount} reached finish. Best reward: ${agent.bestReward.toFixed(0)}`
-    );
+    setStatusMsg('tr.msg.complete', { n: agent.stats.length, k: finishedCount, best: agent.bestReward.toFixed(0) });
     setTrainingSummary({
       episodes: agent.stats.length,
       finished: finishedCount,
@@ -189,7 +186,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
       robotRef.current.lSpeed = 0;
       robotRef.current.rSpeed = 0;
     }
-    setStatusMsg('Training stopped.');
+    setStatusMsg('tr.msg.stopped');
   }, [robotRef]);
 
   // Generate .ino
@@ -197,7 +194,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     const agent = agentRef.current;
     const code = agent.policyToArduinoCode('Current Track');
     onGenerateIno(code);
-    setStatusMsg('Arduino .ino code generated! Click "Download .ino" to save.');
+    setStatusMsg('tr.msg.generated');
   }, [onGenerateIno]);
 
   // Dengarkan event dari modal global untuk generate .ino
@@ -215,7 +212,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     setActionCounts([]);
     setGridReady(false);
     setIntersections([]);
-    setStatusMsg('Agent reset.');
+    setStatusMsg('tr.msg.reset');
   }, []);
 
   // Stats
@@ -265,13 +262,13 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
     <div className="flex flex-col h-full overflow-y-auto bg-white text-slate-800 text-left">
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-200">
-        <h2 className="text-base font-semibold text-slate-900">Q-Learning Training</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Train the robot to follow the route: Start → Waypoints → Finish.</p>
+        <h2 className="text-base font-semibold text-slate-900">{t('tr.title')}</h2>
+        <p className="text-xs text-slate-500 mt-0.5">{t('tr.subtitle')}</p>
       </div>
 
       {/* Step 1: Route Setup */}
       <div className={sectionCls}>
-        {stepTitle(1, "Set route", "Pick a point type, then click on the track canvas.")}
+        {stepTitle(1, t('tr.step1'), t('tr.step1Hint'))}
 
         <div className="flex gap-2">
           <button
@@ -280,7 +277,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
             className={routeBtn(placementMode === 'start', !!startPoint)}
           >
             <MapPin className="w-4 h-4 text-emerald-600" />
-            <span>Start</span>
+            <span>{t('tr.start')}</span>
             {startPoint && <Check className="w-3.5 h-3.5 text-emerald-600" />}
           </button>
           <button
@@ -289,7 +286,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
             className={routeBtn(placementMode === 'finish', !!finishPoint)}
           >
             <Flag className="w-4 h-4 text-red-600" />
-            <span>Finish</span>
+            <span>{t('tr.finish')}</span>
             {finishPoint && <Check className="w-3.5 h-3.5 text-emerald-600" />}
           </button>
         </div>
@@ -300,21 +297,21 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
           className={`${routeBtn(placementMode === 'waypoint', false)} w-full mt-2 ${placementMode === 'waypoint' ? '' : 'border-dashed'}`}
         >
           <Plus className="w-4 h-4" />
-          <span>Add waypoint</span>
-          <span className="text-xs font-normal text-slate-400">(point to pass through)</span>
+          <span>{t('tr.addWaypoint')}</span>
+          <span className="text-xs font-normal text-slate-400">{t('tr.waypointHint')}</span>
         </button>
 
         {placementMode !== 'none' && (
           <div className="mt-2 flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
             <MousePointerClick className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>Click on the canvas to place the <strong className="font-semibold">{placementMode}</strong> point.</span>
+            <span>{t('tr.placeHint', { kind: t(`tr.kind.${placementMode}` as TKey) })}</span>
           </div>
         )}
 
         {waypoints.length > 0 && (
           <div className="mt-3">
             <div className="text-xs text-slate-500 mb-1.5">
-              Route: Start → {waypoints.map((_, i) => `P${i + 1}`).join(' → ')} → Finish
+              {t('tr.route')} {t('tr.start')} → {waypoints.map((_, i) => `P${i + 1}`).join(' → ')} → {t('tr.finish')}
             </div>
             <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
               {waypoints.map((wp, i) => (
@@ -326,7 +323,8 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
                   <button
                     onClick={() => removeWaypoint(i)}
                     disabled={isTraining}
-                    title="Remove waypoint"
+                    title={t('tr.removeWaypoint')}
+                    aria-label={t('tr.removeWaypoint')}
                     className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-30"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -340,30 +338,30 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
 
       {/* Step 2: Analyze & Train */}
       <div className={sectionCls}>
-        {stepTitle(2, "Analyze & train", "Analyzing the track is optional but shows grid info.")}
+        {stepTitle(2, t('tr.step2'), t('tr.step2Hint'))}
 
         <div className="flex gap-2">
           <button onClick={analyzeTrack} disabled={isTraining} className={`${btnSecondary} flex-1`}>
             <ScanLine className="w-4 h-4" />
-            <span>Analyze track</span>
+            <span>{t('tr.analyze')}</span>
           </button>
           {!isTraining ? (
             <button
               onClick={startTraining}
               disabled={!startPoint || !finishPoint}
               className={`${btnPrimary} flex-1`}
-              title={!startPoint || !finishPoint ? 'Set Start and Finish first' : 'Start training'}
+              title={!startPoint || !finishPoint ? t('tr.needStartFinish') : t('tr.startTraining')}
             >
               <Play className="w-4 h-4" />
-              <span>Start training</span>
+              <span>{t('tr.startTraining')}</span>
             </button>
           ) : (
             <button onClick={stopTraining} className={`${btnDanger} flex-1`}>
               <Square className="w-4 h-4" />
-              <span>Stop</span>
+              <span>{t('tr.stop')}</span>
             </button>
           )}
-          <button onClick={resetAgent} disabled={isTraining} className={btnSecondary} title="Reset agent">
+          <button onClick={resetAgent} disabled={isTraining} className={btnSecondary} title={t('tr.resetAgent')} aria-label={t('tr.resetAgent')}>
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
@@ -376,48 +374,48 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
             disabled={isTraining}
             className="h-4 w-4 rounded border-slate-300 accent-blue-600"
           />
-          <span className="text-xs text-slate-700">Fast training</span>
-          <span className="text-xs text-slate-400">— runs in background without animation</span>
+          <span className="text-xs text-slate-700">{t('tr.fast')}</span>
+          <span className="text-xs text-slate-400">{t('tr.fastHint')}</span>
         </label>
 
         {gridReady && (
           <div className="mt-3 text-xs text-slate-500">
-            Grid {GRID_SIZE}×{GRID_SIZE} · {intersections.length} intersections
+            {t('tr.grid', { n: GRID_SIZE, k: intersections.length })}
           </div>
         )}
       </div>
 
       {/* Step 3: Export */}
       <div className={sectionCls}>
-        {stepTitle(3, "Export", "Generate Arduino code from the best learned route.")}
+        {stepTitle(3, t('tr.step3'), t('tr.step3Hint'))}
         <button
           onClick={generateIno}
           disabled={isTraining || !hasPolicy}
           className={`${btnSecondary} w-full`}
         >
           <Download className="w-4 h-4" />
-          <span>Generate .ino</span>
+          <span>{t('tr.generate')}</span>
         </button>
       </div>
 
       {/* Status */}
-      {statusMsg && (
+      {status && (
         <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-start gap-2">
           {isTraining
             ? <span className="mt-1 w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" />
             : <Info className="w-3.5 h-3.5 mt-0.5 text-slate-400 flex-shrink-0" />}
-          <span className="text-xs text-slate-600 font-mono break-words">{statusMsg}</span>
+          <span className="text-xs text-slate-600 font-mono break-words">{t(status.key, status.vars)}</span>
         </div>
       )}
 
       {/* Results */}
       <div className={sectionCls}>
-        <div className={`${labelCls} mb-2`}>Results</div>
+        <div className={`${labelCls} mb-2`}>{t('tr.results')}</div>
         <dl className="grid grid-cols-3 rounded-md border border-slate-200 divide-x divide-slate-200">
           {[
-            ['Episodes', allStats.length],
-            ['Finished', finishedCount],
-            ['Q-states', qTableSize],
+            [t('tr.episodes'), allStats.length],
+            [t('tr.finished'), finishedCount],
+            [t('tr.qStates'), qTableSize],
           ].map(([label, value]) => (
             <div key={label} className="px-3 py-2">
               <dt className="text-[11px] text-slate-500">{label}</dt>
@@ -427,8 +425,8 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
         </dl>
         <dl className="grid grid-cols-2 mt-2 rounded-md border border-slate-200 divide-x divide-slate-200">
           {[
-            ['Best reward', bestRewardDisplay],
-            ['Avg reward', avgReward],
+            [t('tr.bestReward'), bestRewardDisplay],
+            [t('tr.avgReward'), avgReward],
           ].map(([label, value]) => (
             <div key={label} className="px-3 py-2">
               <dt className="text-[11px] text-slate-500">{label}</dt>
@@ -441,8 +439,8 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
         {allStats.length > 0 && (
           <div className="mt-4">
             <div className="flex items-baseline justify-between mb-2">
-              <span className="text-xs font-medium text-slate-700">Reward history</span>
-              <span className="text-[11px] text-slate-400">last {recentStats.length} episodes</span>
+              <span className="text-xs font-medium text-slate-700">{t('tr.history')}</span>
+              <span className="text-[11px] text-slate-400">{t('tr.lastN', { n: recentStats.length })}</span>
             </div>
             <div className="h-20 flex items-end gap-px border-b border-slate-200">
               {recentStats.map((s, i) => {
@@ -453,15 +451,15 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
                     key={i}
                     className={`flex-1 rounded-t-[1px] ${s.finished ? 'bg-blue-600' : isPositive ? 'bg-slate-400' : 'bg-red-300'}`}
                     style={{ height: `${height}%` }}
-                    title={`Ep ${s.episode}: ${s.totalReward.toFixed(0)}${s.finished ? ' (finished)' : ''} WP:${s.waypointsCollected}`}
+                    title={`Ep ${s.episode}: ${s.totalReward.toFixed(0)}${s.finished ? t('tr.finishedTag') : ''} WP:${s.waypointsCollected}`}
                   />
                 );
               })}
             </div>
             <div className="flex items-center gap-4 mt-1.5 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-600" />Finished</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-slate-400" />Positive</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-300" />Negative</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-600" />{t('tr.finished')}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-slate-400" />{t('tr.positive')}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-300" />{t('tr.negative')}</span>
             </div>
           </div>
         )}
@@ -471,15 +469,15 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
       {(isTraining || actionCounts.length > 0) && (
         <div className={sectionCls}>
           <div className="flex items-baseline justify-between mb-2">
-            <span className={labelCls}>{isTraining ? 'Current episode' : 'Last episode'}</span>
-            <span className="text-[11px] text-slate-400 tabular-nums">{actionCounts.length} steps</span>
+            <span className={labelCls}>{isTraining ? t('tr.currentEp') : t('tr.lastEp')}</span>
+            <span className="text-[11px] text-slate-400 tabular-nums">{t('tr.steps', { n: actionCounts.length })}</span>
           </div>
           <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
             {actionCounts.map((name, i) => (
               <span key={i} className={chipCls}>{name}</span>
             ))}
             {actionCounts.length === 0 && isTraining && (
-              <span className="text-xs text-slate-400">Waiting for actions…</span>
+              <span className="text-xs text-slate-400">{t('tr.waiting')}</span>
             )}
           </div>
         </div>
@@ -489,8 +487,8 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
       {hasPolicy && (
         <div className={sectionCls}>
           <div className="flex items-baseline justify-between mb-2">
-            <span className={labelCls}>Best episode</span>
-            <span className="text-[11px] text-slate-400 tabular-nums">{agentRef.current.bestActions.length} steps</span>
+            <span className={labelCls}>{t('tr.bestEp')}</span>
+            <span className="text-[11px] text-slate-400 tabular-nums">{t('tr.steps', { n: agentRef.current.bestActions.length })}</span>
           </div>
           <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
             {agentRef.current.bestActions.slice(0, 30).map((a, i) => {
@@ -502,7 +500,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
               );
             })}
             {agentRef.current.bestActions.length > 30 && (
-              <span className="text-xs text-slate-400 self-center">+{agentRef.current.bestActions.length - 30} more</span>
+              <span className="text-xs text-slate-400 self-center">{t('tr.more', { n: agentRef.current.bestActions.length - 30 })}</span>
             )}
           </div>
         </div>
@@ -516,22 +514,22 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({ trackCanvasRef, ro
         >
           <span className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-slate-400" />
-            Advanced settings
+            {t('tr.advanced')}
           </span>
           {showAdvanced ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
         </button>
         {showAdvanced && (
           <div className="mt-3 space-y-2">
             {([
-              ['maxEpisodes', 'Max episodes', 1, 5000],
-              ['maxStepsPerEpisode', 'Max steps / episode', 10, 1000],
-              ['alpha', 'Learning rate (α)', 0.01, 1],
-              ['gamma', 'Discount factor (γ)', 0, 1],
-              ['epsilonDecay', 'Epsilon decay', 0.9, 1],
-              ['power', 'Motor power', 50, 255],
-            ] as [keyof typeof config, string, number, number][]).map(([key, label, min, max]) => (
+              ['maxEpisodes', 1, 5000],
+              ['maxStepsPerEpisode', 10, 1000],
+              ['alpha', 0.01, 1],
+              ['gamma', 0, 1],
+              ['epsilonDecay', 0.9, 1],
+              ['power', 50, 255],
+            ] as [keyof typeof config, number, number][]).map(([key, min, max]) => (
               <label key={key} className="flex items-center justify-between text-xs">
-                <span className="text-slate-600">{label}</span>
+                <span className="text-slate-600">{t(`tr.cfg.${key}` as TKey)}</span>
                 <input
                   type="number"
                   value={config[key]}

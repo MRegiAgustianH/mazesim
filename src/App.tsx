@@ -1,13 +1,22 @@
 import React from 'react';
-import { Download, Play, Square, RotateCcw, Save, Brain, Blocks, CheckCircle, X, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { Download, Play, Square, RotateCcw, Save, Brain, Blocks, CheckCircle, X, ZoomIn, ZoomOut, Maximize, GraduationCap, BookOpen, Gamepad2 } from 'lucide-react';
 import logo from './assets/logo.svg';
 import { BlocklyWorkspace } from './blockly/BlocklyWorkspace';
 import { CanvasRenderer, type CanvasRendererHandle } from './simulator/CanvasRenderer';
 import { TrainingPanel } from './qlearning/TrainingPanel';
-import { useStore } from './store/useStore';
+import { useStore, type EditorMode } from './store/useStore';
+import { LIB_VERSIONS, type LibVersion } from './blockly/inoTemplate';
+import { SensorStrip } from './simulator/SensorStrip';
+import { useT, type TKey } from './i18n/i18n';
+import type { TrackId } from './store/useStore';
 
-// three.js is heavy: load the 3D view only when the user switches to 3D
+// Load heavy or rarely used parts on demand
 const Robot3DView = React.lazy(() => import('./simulator/Robot3DView'));
+const LearnPanel = React.lazy(() => import('./learn/LearnPanel'));
+const LibraryPanel = React.lazy(() => import('./learn/LibraryPanel'));
+const RobotPanel = React.lazy(() => import('./oled/RobotPanel'));
+
+const TRACKS: TrackId[] = ['loop', 'scurve', 'maze', 'croc_junior', 'croc_senior', 'custom', 'upload'];
 
 function App() {
   const arduinoCode = useStore((state) => state.arduinoCode);
@@ -26,10 +35,19 @@ function App() {
   const trainingSummary = useStore((state) => state.trainingSummary);
   const setTrainingSummary = useStore((state) => state.setTrainingSummary);
   const setEditorMode = useStore((state) => state.setEditorMode);
-  const [saveStatus, setSaveStatus] = React.useState('');
+  const libraryVersion = useStore((state) => state.libraryVersion);
+  const setLibraryVersion = useStore((state) => state.setLibraryVersion);
+  const robotPanelOpen = useStore((state) => state.robotPanelOpen);
+  const setRobotPanelOpen = useStore((state) => state.setRobotPanelOpen);
+  const lang = useStore((state) => state.lang);
+  const setLang = useStore((state) => state.setLang);
+  const viewMode = useStore((state) => state.viewMode);
+  const setViewMode = useStore((state) => state.setViewMode);
+  const t = useT();
+  const [saved, setSaved] = React.useState(false);
+  React.useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   const [mobileTab, setMobileTab] = React.useState<'editor' | 'simulator'>('editor');
   const [zoom, setZoom] = React.useState(1);
-  const [viewMode, setViewMode] = React.useState<'2d' | '3d'>('2d');
   const getRobot = React.useCallback(() => canvasRendererRef.current?.getRobot() ?? null, []);
   const getTrackCanvas = React.useCallback(() => canvasRendererRef.current?.getTrackCanvas() ?? null, []);
   const setRobotPose = React.useCallback((x: number, y: number, angle: number) => canvasRendererRef.current?.setRobotPose(x, y, angle), []);
@@ -106,7 +124,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'mrbMaze42_robot.ino';
+    a.download = `mrbMaze${libraryVersion}_robot.ino`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -116,8 +134,8 @@ function App() {
   const handleSave = () => {
     if (workspaceXml) {
       localStorage.setItem('blockly_workspace_save', workspaceXml);
-      setSaveStatus('Saved!');
-      setTimeout(() => setSaveStatus(''), 2500);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     }
   };
 
@@ -131,8 +149,20 @@ function App() {
       <header className="flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-20 w-full relative gap-3 md:gap-0">
         <div className="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-start">
           <div className="flex items-center space-x-3">
-            <img src={logo} alt="MazeSim" className="w-9 h-9 rounded-md shadow-sm" />
+            <img src={logo} alt="MRB" className="w-9 h-9 rounded-md shadow-sm" />
             <h1 className="text-xl font-semibold text-slate-800">Simulator</h1>
+          </div>
+          <div className="flex rounded-md border border-slate-300 overflow-hidden h-8 text-xs font-semibold" role="group" aria-label={t('app.language')}>
+            {(['en', 'id'] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                aria-pressed={lang === l}
+                className={`px-2.5 uppercase transition-colors ${lang === l ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+              >
+                {l}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -142,32 +172,43 @@ function App() {
             disabled={simulationState === 'running'}
             className={`whitespace-nowrap flex flex-shrink-0 items-center space-x-1 px-4 py-2 text-white rounded-md transition-colors text-sm font-medium shadow-sm ${simulationState === 'running' ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
             <Play className="w-4 h-4" />
-            <span>Simulate</span>
+            <span>{t('app.simulate')}</span>
           </button>
           <button
             onClick={() => setSimulationState('idle')}
             disabled={simulationState === 'idle'}
             className={`whitespace-nowrap flex flex-shrink-0 items-center space-x-1 px-4 py-2 text-white rounded-md transition-colors text-sm font-medium shadow-sm ${simulationState === 'idle' ? 'bg-rose-400 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700'}`}>
             <Square className="w-4 h-4" />
-            <span>Stop</span>
+            <span>{t('app.stop')}</span>
           </button>
           <button
             onClick={() => {
               setSimulationState('idle');
               window.dispatchEvent(new CustomEvent('reset-simulation'));
             }}
+            title={t('app.reset')}
+            aria-label={t('app.reset')}
             className="flex-shrink-0 flex items-center space-x-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md transition-colors text-sm font-medium shadow-sm">
             <RotateCcw className="w-4 h-4" />
           </button>
           <div className="w-px h-6 bg-slate-300 mx-2 flex-shrink-0"></div>
-          {saveStatus && <span className="text-emerald-600 text-xs font-semibold mr-2 whitespace-nowrap">{saveStatus}</span>}
+          {saved && <span className="text-emerald-600 text-xs font-semibold mr-2 whitespace-nowrap">{t('app.saved')}</span>}
           <button onClick={handleSave} className="whitespace-nowrap flex flex-shrink-0 items-center space-x-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
             <Save className="w-4 h-4" />
-            <span>Save</span>
+            <span>{t('app.save')}</span>
           </button>
+          <select
+            value={libraryVersion}
+            onChange={(e) => setLibraryVersion(e.target.value as LibVersion)}
+            className="flex-shrink-0 h-9 bg-white border border-slate-300 rounded-md px-2 text-sm text-slate-700 shadow-sm"
+            title={t('app.libVersionTitle')}
+            aria-label={t('app.libVersion')}
+          >
+            {LIB_VERSIONS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+          </select>
           <button onClick={handleDownload} className="whitespace-nowrap flex flex-shrink-0 items-center space-x-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
             <Download className="w-4 h-4" />
-            <span>Download .ino</span>
+            <span>{t('app.download')}</span>
           </button>
         </div>
       </header>
@@ -178,29 +219,26 @@ function App() {
         <section className={`${mobileTab === 'editor' ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 h-full border-b lg:border-b-0 lg:border-r border-slate-300 bg-white flex-col relative z-10 flex-shrink-0`}>
           {/* Tab Header */}
           <div className="absolute top-0 left-0 right-0 p-2 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10">
-            <div className="flex items-center space-x-1">
-              <button
-                onClick={() => setEditorMode('blockly')}
-                className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                  editorMode === 'blockly'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
-                }`}
-              >
-                <Blocks className="w-3 h-3" />
-                <span>Blockly</span>
-              </button>
-              <button
-                onClick={() => setEditorMode('ai')}
-                className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                  editorMode === 'ai'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
-                }`}
-              >
-                <Brain className="w-3 h-3" />
-                <span>AI Training</span>
-              </button>
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+              {([
+                ['blockly', 'tab.blockly', Blocks],
+                ['ai', 'tab.ai', Brain],
+                ['learn', 'tab.learn', GraduationCap],
+                ['library', 'tab.library', BookOpen],
+              ] as [EditorMode, TKey, typeof Blocks][]).map(([mode, label, Icon]) => (
+                <button
+                  key={mode}
+                  onClick={() => setEditorMode(mode)}
+                  className={`flex flex-shrink-0 items-center space-x-1 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    editorMode === mode
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  <span>{t(label)}</span>
+                </button>
+              ))}
             </div>
           </div>
           {/* Editor Content - Both panels stay mounted, toggle via CSS */}
@@ -215,30 +253,34 @@ function App() {
                 onGenerateIno={handleAiGenerateIno}
               />
             </div>
+            <React.Suspense fallback={null}>
+              {editorMode === 'learn' && <LearnPanel />}
+              {editorMode === 'library' && <LibraryPanel />}
+            </React.Suspense>
           </div>
         </section>
 
         {/* Right Panel - Simulator UI */}
         <section className={`${mobileTab === 'simulator' ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 h-full bg-slate-200 flex-col relative z-10 flex-shrink-0`}>
           <div className="absolute top-0 left-0 right-0 p-2 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-500 z-10 shadow-sm flex justify-between items-center h-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
-            <span className="hidden sm:inline">SIMULATOR</span>
+            <span className="hidden sm:inline">{t('sim.title')}</span>
             <div className="flex space-x-2 items-center min-w-max">
               {activeTrack === 'custom' && (
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('clear-custom-track'))}
                   className="bg-slate-200 hover:bg-slate-300 text-slate-700 border border-slate-300 rounded px-2 text-xs h-6 shadow-sm mr-2 transition-colors">
-                  Clear Track
+                  {t('sim.clearTrack')}
                 </button>
               )}
               {activeTrack === 'upload' && (
                 <div className="flex items-center space-x-1 mr-2 bg-slate-200 rounded px-2 h-6 border border-slate-300">
-                  <span className="text-xs text-slate-600">Size:</span>
+                  <span className="text-xs text-slate-600">{t('sim.size')}</span>
                   <input
                     type="number"
                     value={activeTrackWidthCm}
                     onChange={(e) => setActiveTrackWidthCm(Number(e.target.value))}
                     className="w-10 h-4 text-xs bg-white text-center rounded border-none outline-none"
-                    title="Width (cm)"
+                    title={t('sim.widthCm')}
                   />
                   <span className="text-xs text-slate-500">x</span>
                   <input
@@ -246,18 +288,27 @@ function App() {
                     value={activeTrackHeightCm}
                     onChange={(e) => setActiveTrackHeightCm(Number(e.target.value))}
                     className="w-10 h-4 text-xs bg-white text-center rounded border-none outline-none"
-                    title="Height (cm)"
+                    title={t('sim.heightCm')}
                   />
                   <span className="text-xs text-slate-600">cm</span>
                 </div>
               )}
+              <button
+                onClick={() => setRobotPanelOpen(!robotPanelOpen)}
+                aria-pressed={robotPanelOpen}
+                className={`flex items-center gap-1 px-2 h-6 mr-2 rounded border text-xs font-semibold shadow-sm transition-colors ${robotPanelOpen ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'}`}
+                title={t('sim.robotTitle')}
+              >
+                <Gamepad2 className="w-3.5 h-3.5" />
+                <span>{t('sim.robot')}</span>
+              </button>
               <div className="flex rounded border border-slate-300 overflow-hidden h-6 mr-2 shadow-sm">
                 {(['2d', '3d'] as const).map((m) => (
                   <button
                     key={m}
                     onClick={() => setViewMode(m)}
                     className={`px-2 text-xs font-semibold uppercase transition-colors ${viewMode === m ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
-                    title={m === '3d' ? '3D view with follow camera' : '2D top view (edit robot, draw, place points)'}
+                    title={m === '3d' ? t('sim.view3d') : t('sim.view2d')}
                   >
                     {m}
                   </button>
@@ -265,15 +316,10 @@ function App() {
               </div>
               <select
                 value={activeTrack}
-                onChange={(e) => setActiveTrack(e.target.value as any)}
+                onChange={(e) => setActiveTrack(e.target.value as TrackId)}
+                aria-label={t('sim.trackPrefix')}
                 className="bg-white border border-slate-300 rounded px-2 text-xs h-6 shadow-sm">
-                <option value="loop">Track: Loop</option>
-                <option value="scurve">Track: S-Curve</option>
-                <option value="maze">Track: Maze Grid</option>
-                <option value="croc_junior">Track: CROC 2026 Junior (3×3 m)</option>
-                <option value="croc_senior">Track: CROC 2026 Senior (3×3 m)</option>
-                <option value="custom">Track: Custom (Draw)</option>
-                <option value="upload">Track: Upload Image/PDF</option>
+                {TRACKS.map(id => <option key={id} value={id}>{t('sim.trackPrefix')} {t(`sim.track.${id}` as TKey)}</option>)}
               </select>
               <input
                 type="file"
@@ -285,27 +331,31 @@ function App() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="ml-2 bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-300 rounded px-2 text-xs h-6 shadow-sm transition-colors">
-                Upload
+                {t('sim.upload')}
               </button>
             </div>
           </div>
+          {robotPanelOpen && <React.Suspense fallback={null}><RobotPanel /></React.Suspense>}
+          <div className="absolute top-12 right-2 z-30 pointer-events-auto">
+            <SensorStrip getRobot={getRobot} />
+          </div>
           {viewMode === '3d' && (
             <div className="absolute top-10 bottom-0 left-0 right-0 z-20 bg-slate-200">
-              <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading 3D view…</div>}>
+              <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">{t('sim.loading3d')}</div>}>
                 <Robot3DView getRobot={getRobot} getTrackCanvas={getTrackCanvas} setRobotPose={setRobotPose} />
               </React.Suspense>
             </div>
           )}
           <div className="absolute top-10 bottom-0 left-0 right-0 p-2 md:p-8 bg-slate-200 overflow-auto">
             {/* Zoom Controls */}
-            <div className={`${viewMode === '3d' ? 'hidden' : 'flex'} fixed md:absolute bottom-20 md:bottom-auto md:top-4 right-4 flex-col space-y-2 z-20`}>
-               <button onClick={()=>setZoom(z=>z+0.25)} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title="Zoom In">
+            <div className={`${viewMode === '3d' ? 'hidden' : 'flex'} fixed md:absolute bottom-20 md:bottom-auto md:top-20 right-4 flex-col space-y-2 z-20`}>
+               <button onClick={()=>setZoom(z=>z+0.25)} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title={t('sim.zoomIn')} aria-label={t('sim.zoomIn')}>
                  <ZoomIn className="w-5 h-5"/>
                </button>
-               <button onClick={()=>setZoom(1)} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title="Reset Zoom">
+               <button onClick={()=>setZoom(1)} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title={t('sim.zoomReset')} aria-label={t('sim.zoomReset')}>
                  <Maximize className="w-5 h-5"/>
                </button>
-               <button onClick={()=>setZoom(z=>Math.max(0.25, z-0.25))} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title="Zoom Out">
+               <button onClick={()=>setZoom(z=>Math.max(0.25, z-0.25))} className="p-2 bg-white rounded-full md:rounded shadow-lg md:shadow text-slate-700 hover:bg-slate-50 transition-colors" title={t('sim.zoomOut')} aria-label={t('sim.zoomOut')}>
                  <ZoomOut className="w-5 h-5"/>
                </button>
             </div>
@@ -328,14 +378,14 @@ function App() {
           className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center space-x-2 ${mobileTab === 'editor' ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-50'}`}
         >
           <Blocks className="w-4 h-4" />
-          <span>Editor Blockly</span>
+          <span>{t('mobile.editor')}</span>
         </button>
         <button
           onClick={() => setMobileTab('simulator')}
           className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center space-x-2 ${mobileTab === 'simulator' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-50'}`}
         >
           <Play className="w-4 h-4" />
-          <span>Simulator Robot</span>
+          <span>{t('mobile.simulator')}</span>
         </button>
       </div>
 
@@ -346,31 +396,31 @@ function App() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
               <div className="flex items-center space-x-2">
                 <CheckCircle className="w-5 h-5 text-emerald-600" />
-                <span className="font-semibold text-slate-900">Training Selesai</span>
+                <span className="font-semibold text-slate-900">{t('modal.title')}</span>
               </div>
-              <button onClick={() => setTrainingSummary(null)} className="text-slate-400 hover:text-slate-700 transition-colors">
+              <button onClick={() => setTrainingSummary(null)} className="text-slate-400 hover:text-slate-700 transition-colors" aria-label={t('modal.close')}>
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="px-5 py-5 space-y-3">
               <p className="text-sm text-slate-600">
-                Proses training telah selesai. Robot dapat menjalankan hasil training melalui tombol Simulate.
+                {t('modal.text')}
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-md border border-slate-200 px-3 py-2">
-                  <div className="text-[11px] text-slate-500">Episodes</div>
+                  <div className="text-[11px] text-slate-500">{t('modal.episodes')}</div>
                   <div className="text-lg font-semibold text-slate-900 tabular-nums">{trainingSummary.episodes}</div>
                 </div>
                 <div className="rounded-md border border-slate-200 px-3 py-2">
-                  <div className="text-[11px] text-slate-500">Finished</div>
+                  <div className="text-[11px] text-slate-500">{t('modal.finished')}</div>
                   <div className="text-lg font-semibold text-slate-900 tabular-nums">{trainingSummary.finished}</div>
                 </div>
                 <div className="rounded-md border border-slate-200 px-3 py-2">
-                  <div className="text-[11px] text-slate-500">Best Reward</div>
+                  <div className="text-[11px] text-slate-500">{t('modal.bestReward')}</div>
                   <div className="text-lg font-semibold text-slate-900 tabular-nums">{trainingSummary.bestReward.toFixed(0)}</div>
                 </div>
                 <div className="rounded-md border border-slate-200 px-3 py-2">
-                  <div className="text-[11px] text-slate-500">Q-Table States</div>
+                  <div className="text-[11px] text-slate-500">{t('modal.qStates')}</div>
                   <div className="text-lg font-semibold text-slate-900 tabular-nums">{trainingSummary.qTableSize}</div>
                 </div>
               </div>
@@ -380,7 +430,7 @@ function App() {
                 onClick={() => setTrainingSummary(null)}
                 className="flex-1 h-9 px-4 bg-white border border-slate-300 hover:bg-slate-50 rounded-md text-sm font-medium text-slate-700 transition-colors"
               >
-                Tutup
+                {t('modal.close')}
               </button>
               <button
                 onClick={() => {
@@ -390,7 +440,7 @@ function App() {
                 className="flex-1 h-9 flex items-center justify-center space-x-1 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium text-white transition-colors"
               >
                 <Download className="w-4 h-4" />
-                <span>Generate .ino</span>
+                <span>{t('modal.generate')}</span>
               </button>
             </div>
           </div>

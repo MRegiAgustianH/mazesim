@@ -155,5 +155,13 @@ export const BlocklyWorkspace: React.FC = () => {
     };
   }, []);
 
+  // Regenerate the .ino when the library version is switched (own effect, so
+  // it survives StrictMode re-running the setup effect above)
+  useEffect(() => useStore.subscribe((st, prev) => {
+    if (st.libraryVersion !== prev.libraryVersion && blocklyInstance.current) {
+      setArduinoCode(arduinoGenerator.workspaceToCode(blocklyInstance.current));
+    }
+  }), [setArduinoCode]);
+
   return <div ref={workspaceRef} className="w-full h-full absolute inset-0" />;
 };

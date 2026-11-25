@@ -5,7 +5,7 @@ export const registerBlocks = () => {
     // Setup & Utility
     Blockly.Blocks['mrb_setup'] = {
         init: function () {
-            this.appendDummyInput().appendField("mrbMaze42 Setup");
+            this.appendDummyInput().appendField("mrbMaze Setup");
             this.setPreviousStatement(true, null);
             this.setNextStatement(true, null);
             this.setColour(120);

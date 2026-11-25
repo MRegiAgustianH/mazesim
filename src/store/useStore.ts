@@ -1,7 +1,16 @@
 import { create } from 'zustand';
 import type { ActionRecord } from '../qlearning/QLearningAgent';
+import type { PartId } from '../simulator/robotLayout';
+import type { LibVersion } from '../blockly/inoTemplate';
+import { readLang, type Lang } from '../i18n/i18n';
+
+const readVersion = (): LibVersion => {
+    try { return localStorage.getItem('mrb_library_version') === '42' ? '42' : '44'; } catch { return '44'; }
+};
 
 interface Point { x: number; y: number; }
+
+export type EditorMode = 'blockly' | 'ai' | 'learn' | 'library';
 
 export type TrackId = 'loop' | 'scurve' | 'maze' | 'croc_junior' | 'croc_senior' | 'custom' | 'upload';
 
@@ -15,7 +24,15 @@ interface AppState {
     customTrackType: 'image' | 'pdf' | null;
     activeTrackWidthCm: number;
     activeTrackHeightCm: number;
-    editorMode: 'blockly' | 'ai';
+    editorMode: EditorMode;
+    highlightPart: PartId | null;
+    libraryFocus: string | null; // function name the Library tab should scroll to
+    libraryVersion: LibVersion; // mrbMaze library the .ino is generated for
+    robotPanelOpen: boolean; // OLED + buttons popup
+    lang: Lang; // UI language
+    viewMode: '2d' | '3d';
+    robotPower: boolean; // POWER push switch on the robot
+    motorPower: boolean; // MOTOR push switch on the robot
     startPoint: Point | null;
     finishPoint: Point | null;
     waypoints: Point[];
@@ -33,7 +50,15 @@ interface AppState {
     setCustomTrackSrc: (src: string | null, type?: 'image' | 'pdf') => void;
     setActiveTrackWidthCm: (cm: number) => void;
     setActiveTrackHeightCm: (cm: number) => void;
-    setEditorMode: (mode: 'blockly' | 'ai') => void;
+    setEditorMode: (mode: EditorMode) => void;
+    setHighlightPart: (part: PartId | null) => void;
+    openLibrary: (fn: string | null) => void;
+    setLibraryVersion: (v: LibVersion) => void;
+    setRobotPanelOpen: (open: boolean) => void;
+    setLang: (lang: Lang) => void;
+    setViewMode: (mode: '2d' | '3d') => void;
+    setRobotPower: (on: boolean) => void;
+    setMotorPower: (on: boolean) => void;
     setStartPoint: (point: Point | null) => void;
     setFinishPoint: (point: Point | null) => void;
     setWaypoints: (points: Point[]) => void;
@@ -57,6 +82,14 @@ export const useStore = create<AppState>((set) => ({
     activeTrackWidthCm: 150,
     activeTrackHeightCm: 150,
     editorMode: 'blockly',
+    highlightPart: 'sensors',
+    libraryFocus: null,
+    libraryVersion: readVersion(),
+    robotPanelOpen: false,
+    lang: readLang(),
+    viewMode: '2d',
+    robotPower: true,
+    motorPower: true,
     startPoint: null,
     finishPoint: null,
     waypoints: [],
@@ -75,6 +108,21 @@ export const useStore = create<AppState>((set) => ({
     setActiveTrackWidthCm: (cm) => set({ activeTrackWidthCm: cm }),
     setActiveTrackHeightCm: (cm) => set({ activeTrackHeightCm: cm }),
     setEditorMode: (mode) => set({ editorMode: mode }),
+    setHighlightPart: (part) => set({ highlightPart: part }),
+    openLibrary: (fn) => set({ editorMode: 'library', libraryFocus: fn }),
+    setLibraryVersion: (v) => {
+        try { localStorage.setItem('mrb_library_version', v); } catch { /* storage unavailable */ }
+        set({ libraryVersion: v });
+    },
+    setRobotPanelOpen: (open) => set({ robotPanelOpen: open }),
+    setLang: (lang) => {
+        try { localStorage.setItem('mrb_lang', lang); } catch { /* storage unavailable */ }
+        document.documentElement.lang = lang;
+        set({ lang });
+    },
+    setViewMode: (mode) => set({ viewMode: mode }),
+    setRobotPower: (on) => set({ robotPower: on }),
+    setMotorPower: (on) => set({ motorPower: on }),
     setStartPoint: (point) => set({ startPoint: point }),
     setFinishPoint: (point) => set({ finishPoint: point }),
     setWaypoints: (points) => set({ waypoints: points }),

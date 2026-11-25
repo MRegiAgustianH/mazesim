@@ -1,33 +1,11 @@
 import * as Blockly from 'blockly';
+import { useStore } from '../store/useStore';
+import { gripperFn, inoSketch } from './inoTemplate';
 
 export const arduinoGenerator = new Blockly.Generator('Arduino');
 
 arduinoGenerator.finish = function (code: string) {
-  return `#include <mrbMaze42.h>
-mrbMaze42 my;
-
-void setup() {
-  my.mazeSetup();
-  my.welcomeScreen();
-  my.sensorSet(300, 300, 300, 300, 300, 300, 300, 300);
-  my.pidSet(28,8,8);
-  my.lineColour(0);     // 0 for black line, 1 for white line
-  my.start();
-}
-
-/*
-  my.pickup(100,100,3,300);	gripPower, liftHigh, speed, delay
-  my.putdown(3,300);			speed, delay
-*/
-
-void loop() {
-  // start code here ! -------------------------
-${code}
-
-
-  // end of code -------------------------------
-  my.end();
-}`;
+  return inoSketch(useStore.getState().libraryVersion, code);
 };
 
 arduinoGenerator.scrub_ = function (block: Blockly.Block, code: string, thisOnly?: boolean): string {
@@ -95,10 +73,10 @@ arduinoGenerator.forBlock['mrb_sac'] = (_block: any) =>
   `  my.sac(${getNumber(_block, 'POWER')});\n`;
 
 arduinoGenerator.forBlock['mrb_pickup'] = (_block: any) =>
-  `  my.pickup(${getNumber(_block, 'GRIP')}, ${getNumber(_block, 'LIFT')}, ${getNumber(_block, 'SPEED')}, ${getNumber(_block, 'DELAY')});\n`;
+  `  my.${gripperFn(useStore.getState().libraryVersion).pickup}(${getNumber(_block, 'GRIP')}, ${getNumber(_block, 'LIFT')}, ${getNumber(_block, 'SPEED')}, ${getNumber(_block, 'DELAY')});\n`;
 
 arduinoGenerator.forBlock['mrb_putdown'] = (_block: any) =>
-  `  my.putdown(${getNumber(_block, 'SPEED')}, ${getNumber(_block, 'DELAY')});\n`;
+  `  my.${gripperFn(useStore.getState().libraryVersion).putdown}(${getNumber(_block, 'SPEED')}, ${getNumber(_block, 'DELAY')});\n`;
 
 arduinoGenerator.forBlock['mrb_delay'] = (_block: any) =>
   `  delay(${getNumber(_block, 'DELAY')});\n`;
