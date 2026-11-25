@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { useStore } from '../store/useStore';
 import { Robot } from './Robot';
-import { drawTrack } from './TrackPreset';
+import { drawTrack, MAZE_GRID } from './TrackPreset';
+import { beep } from './beep';
 import { QLearningAgent } from '../qlearning/QLearningAgent';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -62,8 +63,8 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
         if (!canvas) return;
 
         // Default start pos based on track
-        const startX = activeTrack === 'scurve' ? 100 : 150;
-        const startY = activeTrack === 'scurve' ? canvas.height - 100 : 150;
+        const startX = activeTrack === 'scurve' ? 100 : activeTrack === 'maze' ? MAZE_GRID.margin : 150;
+        const startY = activeTrack === 'scurve' ? canvas.height - 100 : activeTrack === 'maze' ? MAZE_GRID.margin : 150;
         const startAngle = activeTrack === 'scurve' ? -Math.PI / 2 : 0;
 
         // Calculate pixels per cm based on track dimensions and canvas size.
@@ -322,6 +323,7 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                     for (const a of actions) {
                         if (!robot._isSimulationRunning) break;
                         await QLearningAgent.runAction(robot, a.actionId, power);
+                        if (robot._isSimulationRunning) beep();
                     }
                     console.log('AI replay finished');
                 } catch (err) {
@@ -336,7 +338,22 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
             const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
             try {
                 const runner = new AsyncFunction('sim', jsCode);
-                runner(robotRef.current).then(() => {
+                // Wrap each command called by the Blockly code so it beeps once it has
+                // fully finished. Nested calls inside Robot (e.g. rl -> tright) use the
+                // real robot via `this`, so they don't beep on their own.
+                const robot = robotRef.current;
+                const sim = new Proxy(robot, {
+                    get(target, prop, receiver) {
+                        const value = Reflect.get(target, prop, receiver);
+                        if (typeof value !== 'function') return value;
+                        return async (...args: unknown[]) => {
+                            const result = await value.apply(target, args);
+                            if (target._isSimulationRunning) beep();
+                            return result;
+                        };
+                    },
+                });
+                runner(sim).then(() => {
                     console.log("Simulation finished successfully");
                     if (runTokenRef.current === token) setSimulationState('idle');
                 }).catch((err: unknown) => {

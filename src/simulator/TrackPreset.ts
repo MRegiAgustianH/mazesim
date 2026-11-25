@@ -1,3 +1,7 @@
+// Maze Grid preset geometry (canvas px, canvas is 800px = 150cm).
+// 6x6 boxes, each 110px (~20.6cm), robot starts at the top-left corner.
+export const MAZE_GRID = { margin: 70, cell: 110, cells: 6 } as const;
+
 export const drawTrack = (ctx: CanvasRenderingContext2D, width: number, height: number, type: 'loop' | 'scurve' | 'maze', pixelsPerCm: number = 5.33) => {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
@@ -30,20 +34,16 @@ export const drawTrack = (ctx: CanvasRenderingContext2D, width: number, height: 
         ctx.moveTo(330, 200);
         ctx.lineTo(370, 200); // End intersection marker
     } else if (type === 'maze') {
-        // Grid Maze for routing/maze logic
-        // Draw horizontal lines
-        for (let y = 150; y <= height - 150; y += 250) {
-            ctx.moveTo(150, y);
-            ctx.lineTo(width - 150, y);
+        // 6x6 box grid (7 lines each way) for routing/maze logic
+        const { margin, cell, cells } = MAZE_GRID;
+        const end = margin + cell * cells;
+        for (let i = 0; i <= cells; i++) {
+            const p = margin + i * cell;
+            ctx.moveTo(margin, p); // horizontal
+            ctx.lineTo(end, p);
+            ctx.moveTo(p, margin); // vertical
+            ctx.lineTo(p, end);
         }
-        // Draw vertical lines
-        for (let x = 150; x <= width - 150; x += 250) {
-            ctx.moveTo(x, 150);
-            ctx.lineTo(x, height - 150);
-        }
-
-        // Start point indicator
-        ctx.arc(150, 150, 8, 0, Math.PI * 2);
     }
 
     ctx.stroke();
