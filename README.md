@@ -11,7 +11,7 @@ npm run build    # production build (output: dist/)
 npm run lint
 ```
 
-Deployed to GitHub Pages under `/mazesim/` via `.github/workflows/deploy.yml` on push to `main`.
+Deployed to Vercel (Vite preset, output `dist/`); every push to `main` triggers a production deploy.
 
 ## Project structure
 
