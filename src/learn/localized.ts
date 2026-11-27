@@ -27,7 +27,7 @@ export function getLessons(lang: Lang): Lesson[] {
     if (lang !== 'id') return LESSONS;
     return LESSONS.map(l => {
         const t = LESSONS_ID[l.id];
-        return t ? { ...l, title: t.title, body: t.body, tryIt: t.tryIt ?? l.tryIt } : l;
+        return t ? { ...l, title: t.title, hook: t.hook, body: t.body, code: t.code ?? l.code, tryIt: t.tryIt ?? l.tryIt } : l;
     });
 }
 

@@ -1,22 +1,27 @@
 import { create } from 'zustand';
 import type { ActionRecord } from '../qlearning/QLearningAgent';
 import type { PartId } from '../simulator/robotLayout';
-import type { LibVersion } from '../blockly/inoTemplate';
+import { convertSketch, type LibVersion } from '../blockly/inoTemplate';
 import { readLang, type Lang } from '../i18n/i18n';
 
 const readVersion = (): LibVersion => {
     try { return localStorage.getItem('mrb_library_version') === '42' ? '42' : '44'; } catch { return '44'; }
 };
 
+const readSketch = (): string => {
+    try { return localStorage.getItem('mrb_sketch_code') ?? ''; } catch { return ''; }
+};
+
 interface Point { x: number; y: number; }
 
-export type EditorMode = 'blockly' | 'ai' | 'learn' | 'library';
+export type EditorMode = 'blockly' | 'code' | 'ai' | 'learn' | 'library';
 
 export type TrackId = 'loop' | 'scurve' | 'maze' | 'croc_junior' | 'croc_senior' | 'custom' | 'upload';
 
 interface AppState {
     arduinoCode: string;
     jsCode: string;
+    sketchCode: string; // hand-written .ino in the Code tab
     workspaceXml: string | null;
     simulationState: 'idle' | 'running' | 'paused';
     activeTrack: TrackId;
@@ -44,6 +49,7 @@ interface AppState {
 
     setArduinoCode: (code: string) => void;
     setJsCode: (code: string) => void;
+    setSketchCode: (code: string) => void;
     setWorkspaceXml: (xml: string) => void;
     setSimulationState: (state: 'idle' | 'running' | 'paused') => void;
     setActiveTrack: (track: TrackId) => void;
@@ -71,9 +77,10 @@ interface AppState {
     setTrainingSummary: (summary: { episodes: number; finished: number; bestReward: number; qTableSize: number } | null) => void;
 }
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => ({
     arduinoCode: '',
     jsCode: '',
+    sketchCode: readSketch(),
     workspaceXml: null,
     simulationState: 'idle',
     activeTrack: 'loop',
@@ -101,6 +108,10 @@ export const useStore = create<AppState>((set) => ({
 
     setArduinoCode: (code) => set({ arduinoCode: code }),
     setJsCode: (code) => set({ jsCode: code }),
+    setSketchCode: (code) => {
+        try { localStorage.setItem('mrb_sketch_code', code); } catch { /* storage unavailable */ }
+        set({ sketchCode: code });
+    },
     setWorkspaceXml: (xml) => set({ workspaceXml: xml }),
     setSimulationState: (state) => set({ simulationState: state }),
     setActiveTrack: (track) => set({ activeTrack: track }),
@@ -112,7 +123,10 @@ export const useStore = create<AppState>((set) => ({
     openLibrary: (fn) => set({ editorMode: 'library', libraryFocus: fn }),
     setLibraryVersion: (v) => {
         try { localStorage.setItem('mrb_library_version', v); } catch { /* storage unavailable */ }
-        set({ libraryVersion: v });
+        // The Code tab sketch follows the version; loop() and own code are kept
+        const sketchCode = convertSketch(get().sketchCode, get().libraryVersion, v);
+        try { localStorage.setItem('mrb_sketch_code', sketchCode); } catch { /* storage unavailable */ }
+        set({ libraryVersion: v, sketchCode });
     },
     setRobotPanelOpen: (open) => set({ robotPanelOpen: open }),
     setLang: (lang) => {

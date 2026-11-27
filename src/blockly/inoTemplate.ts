@@ -43,6 +43,23 @@ function setupBlock(v: LibVersion): string {
 */`;
 }
 
+// Rewrite a sketch written for one library version for the other, keeping the
+// user's own code: header and object type, the template setup() (only when it
+// is still the untouched template), gripper names, and motorBalance (4.4 only).
+export function convertSketch(code: string, from: LibVersion, to: LibVersion): string {
+    if (from === to) return code;
+    let out = code
+        .replace(new RegExp(`#include\\s*<mrbMaze${from}\\.h>`, 'g'), `#include <mrbMaze${to}.h>`)
+        .replace(new RegExp(`\\bmrbMaze${from}(\\s+\\w+\\s*;)`, 'g'), `mrbMaze${to}$1`)
+        .replace(setupBlock(from), setupBlock(to));
+    const [a, b] = [gripperFn(from), gripperFn(to)];
+    out = out
+        .replace(new RegExp(`\\bmy\\s*\\.\\s*${a.pickup}\\s*\\(`, 'g'), `my.${b.pickup}(`)
+        .replace(new RegExp(`\\bmy\\s*\\.\\s*${a.putdown}\\s*\\(`, 'g'), `my.${b.putdown}(`);
+    if (to === '42') out = out.replace(/^[ \t]*my\s*\.\s*motorBalance\s*\([^)]*\)\s*;[^\n]*\n/gm, '');
+    return out;
+}
+
 // `body` is the code inside loop(); `notes` are extra comment lines placed
 // before "start code here".
 export function inoSketch(v: LibVersion, body: string, notes: string[] = []): string {

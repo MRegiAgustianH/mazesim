@@ -1,10 +1,12 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Cpu, Lightbulb, Route, BookOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Cpu, Lightbulb, Route, BookOpen, Play } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { PART_ORDER, type PartId } from '../simulator/robotLayout';
 import { getLessons, getLibrary, getPart } from './localized';
 import { useT } from '../i18n/i18n';
 import { RobotDiagram } from './RobotDiagram';
+import { LessonTrack } from './LessonTrack';
+import { Note, CodeSample } from './ui';
 
 type View = 'path' | 'parts';
 
@@ -22,25 +24,34 @@ const btnBase = 'inline-flex items-center justify-center gap-1.5 h-8 px-3 rounde
 const btnSecondary = `${btnBase} bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:text-slate-300 disabled:bg-white`;
 const btnPrimary = `${btnBase} bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400`;
 
-const FunctionChips: React.FC<{ names: string[] }> = ({ names }) => {
+// Rows that open the function in the Library tab
+const FunctionList: React.FC<{ names: string[] }> = ({ names }) => {
     const openLibrary = useStore(s => s.openLibrary);
     const lang = useStore(s => s.lang);
     const summaries = React.useMemo(() => Object.fromEntries(getLibrary(lang).map(f => [f.name, f.summary])), [lang]);
     if (!names.length) return null;
     return (
-        <div className="flex flex-wrap gap-1.5">
+        <ul className="rounded-md border border-slate-200 divide-y divide-slate-100">
             {names.map(n => (
-                <button
-                    key={n}
-                    onClick={() => openLibrary(n)}
-                    title={summaries[n]}
-                    className="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-[11px] font-mono text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
-                >
-                    {n}()
-                </button>
+                <li key={n}>
+                    <button
+                        onClick={() => openLibrary(n)}
+                        className="group w-full flex items-start gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                    >
+                        <code className="w-32 flex-shrink-0 text-xs font-mono font-semibold text-slate-900">{n}()</code>
+                        <span className="flex-1 min-w-0 text-xs text-slate-600 leading-relaxed">{summaries[n]}</span>
+                        <ChevronRight className="w-4 h-4 flex-shrink-0 text-slate-300 group-hover:text-slate-500" />
+                    </button>
+                </li>
             ))}
-        </div>
+        </ul>
     );
+};
+
+// "Sense: the sensors…" -> the lead word in bold
+const Paragraph: React.FC<{ text: string }> = ({ text }) => {
+    const m = text.match(/^([^:.()]{2,24}):\s(.*)$/);
+    return <p>{m ? <><span className="font-semibold text-slate-900">{m[1]}:</span> {m[2]}</> : text}</p>;
 };
 
 const PartDetail: React.FC<{ id: PartId }> = ({ id }) => {
@@ -85,14 +96,11 @@ const PartDetail: React.FC<{ id: PartId }> = ({ id }) => {
             {p.functions.length > 0 && (
                 <div>
                     <div className={`${labelCls} mb-1.5`}>{t('learn.libFns')}</div>
-                    <FunctionChips names={p.functions} />
+                    <FunctionList names={p.functions} />
                 </div>
             )}
             {p.tip && (
-                <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    <Lightbulb className="w-4 h-4 flex-shrink-0 mt-px" />
-                    <span>{p.tip}</span>
-                </div>
+                <Note icon={Lightbulb} title={t('learn.tip')}>{p.tip}</Note>
             )}
         </div>
     );
@@ -165,64 +173,49 @@ export const LearnPanel: React.FC = () => {
 
             {view === 'path' ? (
                 <div className="px-4 py-4 space-y-4">
-                    <ol className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1" aria-label={t('learn.lessons')}>
-                        {LESSONS.map((l, i) => (
-                            <li key={l.id}>
-                                <button
-                                    onClick={() => goLesson(i)}
-                                    title={l.title}
-                                    aria-current={i === lessonIdx ? 'step' : undefined}
-                                    className={`w-7 h-7 rounded-full text-xs font-semibold border transition-colors ${
-                                        i === lessonIdx
-                                            ? 'bg-blue-600 border-blue-600 text-white'
-                                            : i < lessonIdx
-                                                ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
-                                                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
-                                    }`}
-                                >
-                                    {i + 1}
-                                </button>
-                            </li>
-                        ))}
-                    </ol>
+                    <LessonTrack titles={LESSONS.map(l => l.title)} current={lessonIdx} onSelect={goLesson} />
 
-                    <div>
+                    <header className="pt-1">
                         <div className={labelCls}>{t('learn.lessonOf', { n: lessonIdx + 1, total: LESSONS.length })}</div>
-                        <h3 className="text-lg font-semibold text-slate-900 mt-0.5">{lesson.title}</h3>
+                        <h3 className="text-xl font-semibold text-slate-900 mt-1 text-balance">{lesson.title}</h3>
+                        <p className="mt-2 text-[15px] text-slate-600 leading-relaxed text-pretty">{lesson.hook}</p>
+                    </header>
+
+                    <div className="space-y-2.5 text-sm text-slate-700 leading-relaxed max-w-prose">
+                        {lesson.body.map((b, i) => <Paragraph key={i} text={b} />)}
                     </div>
 
-                    <div className="space-y-2.5 text-sm text-slate-700 leading-relaxed">
-                        {lesson.body.map((b, i) => <p key={i}>{b}</p>)}
-                    </div>
+                    {lesson.code && <CodeSample code={lesson.code} />}
 
-                    <div>
-                        <div className={`${labelCls} mb-1.5`}>{t('learn.partsInLesson')}</div>
-                        <div className="flex flex-wrap gap-1.5">
-                            {lesson.parts.map(id => (
-                                <button
-                                    key={id}
-                                    onClick={() => selectPart(id)}
-                                    className="px-2 py-1 rounded border border-orange-200 bg-orange-50 text-[11px] font-medium text-orange-800 hover:bg-orange-100 transition-colors"
-                                >
-                                    {getPart(id, lang).name}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                    {lesson.tryIt && <Note icon={Play} title={t('learn.tryIt')}>{lesson.tryIt}</Note>}
 
                     {lesson.functions.length > 0 && (
-                        <div>
-                            <div className={`${labelCls} mb-1.5`}>{t('learn.functions')}</div>
-                            <FunctionChips names={lesson.functions} />
-                        </div>
+                        <section>
+                            <h4 className={`${labelCls} mb-1.5`}>{t('learn.functions')}</h4>
+                            <FunctionList names={lesson.functions} />
+                        </section>
                     )}
 
-                    {lesson.tryIt && (
-                        <div className="flex gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-                            <Lightbulb className="w-4 h-4 flex-shrink-0 mt-px" />
-                            <span><span className="font-semibold">{t('learn.tryIt')} </span>{lesson.tryIt}</span>
-                        </div>
-                    )}
+                    <section>
+                        <h4 className={`${labelCls} mb-1.5`}>{t('learn.partsInLesson')}</h4>
+                        <ul className="rounded-md border border-slate-200 divide-y divide-slate-100">
+                            {lesson.parts.map(id => {
+                                const part = getPart(id, lang);
+                                return (
+                                    <li key={id}>
+                                        <button
+                                            onClick={() => selectPart(id)}
+                                            className="group w-full flex items-start gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                                        >
+                                            <span className="w-32 flex-shrink-0 text-xs font-semibold text-slate-900">{part.name}</span>
+                                            <span className="flex-1 min-w-0 text-xs text-slate-600 leading-relaxed">{part.role}</span>
+                                            <ChevronRight className="w-4 h-4 flex-shrink-0 text-slate-300 group-hover:text-slate-500" />
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </section>
 
                     <div className="flex justify-between pt-2">
                         <button className={btnSecondary} disabled={lessonIdx === 0} onClick={() => goLesson(lessonIdx - 1)}>
@@ -250,7 +243,7 @@ export const LearnPanel: React.FC = () => {
                                 aria-pressed={highlightPart === id}
                                 className={`px-2 py-1 rounded border text-[11px] font-medium transition-colors ${
                                     highlightPart === id
-                                        ? 'border-orange-400 bg-orange-50 text-orange-800'
+                                        ? 'border-slate-800 bg-slate-800 text-white'
                                         : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                                 }`}
                             >

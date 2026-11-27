@@ -6,6 +6,7 @@ import { drawTrack, MAZE_GRID, IMAGE_TRACKS, isImageTrack } from './TrackPreset'
 import { beep } from './beep';
 import { QLearningAgent } from '../qlearning/QLearningAgent';
 import { tr } from '../i18n/i18n';
+import { compileIno, createSketchRuntime, SketchEnd } from '../code/inoTranspiler';
 
 // The track canvas is read back every frame (sensors), so keep it in CPU memory
 const TRACK_CTX: CanvasRenderingContext2DSettings = { willReadFrequently: true };
@@ -375,6 +376,21 @@ export const CanvasRenderer = forwardRef<CanvasRendererHandle>((_, ref) => {
                     if (runTokenRef.current === token) setSimulationState('idle');
                 }
             })();
+        } else if (editorMode === 'code') {
+            // Code tab: translate the hand-written .ino and run it
+            const robot = robotRef.current;
+            const done = () => { robot.lSpeed = 0; robot.rSpeed = 0; if (runTokenRef.current === token) setSimulationState('idle'); };
+            try {
+                const run = compileIno(useStore.getState().sketchCode);
+                const { my, rt } = createSketchRuntime(robot);
+                run(my, rt).catch((err: unknown) => {
+                    if (err instanceof SketchEnd || !robot._isSimulationRunning) return;
+                    window.dispatchEvent(new CustomEvent('sketch-error', { detail: (err as Error).message ?? String(err) }));
+                }).finally(done);
+            } catch (e) {
+                console.error('Sketch could not be compiled', e);
+                done();
+            }
         } else {
             // Mode Blockly: jalankan kode JS dari Blockly
             if (!jsCode) { setSimulationState('idle'); return; }

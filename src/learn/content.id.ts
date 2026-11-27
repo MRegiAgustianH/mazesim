@@ -4,7 +4,7 @@ import type { PartId } from '../simulator/robotLayout';
 // hardwareParts.ts (specs and pins are matched by index).
 
 export interface PartText { name: string; role: string; description: string[]; specs: [string, string][]; pins?: string[]; tip?: string; }
-export interface LessonText { title: string; body: string[]; tryIt?: string; }
+export interface LessonText { title: string; hook: string; body: string[]; code?: string; tryIt?: string; }
 
 export const PARTS_ID: Record<PartId, PartText> = {
     sensors: {
@@ -186,76 +186,94 @@ export const PARTS_ID: Record<PartId, PartText> = {
 export const LESSONS_ID: Record<string, LessonText> = {
     overview: {
         title: 'Cara kerja line follower',
+        hook: 'Coba berjalan di atas selotip dengan mata tertutup, hanya merasakannya dengan kaki. Itulah seluruh tugas robot ini, dan ia memeriksa garis berkali-kali setiap detik.',
         body: [
-            'Line follower mengulang tiga langkah dengan sangat cepat: membaca, memutuskan, bertindak.',
-            'Membaca: 8 sensor di depan melaporkan sensor mana yang berada di atas garis. Memutuskan: Arduino mengubahnya menjadi error, yaitu seberapa jauh garis di kiri atau kanan. Bertindak: driver motor memperlambat satu roda dan menjaga roda lain tetap cepat, sehingga robot kembali ke garis.',
-            'Bagian selanjutnya membahas setiap komponen dalam loop itu, lalu tiga jenis program yang kamu tulis: setup, gerak dasar, dan simpangan.',
+            'Robot mengulang satu putaran pendek: membaca, memutuskan, bertindak.',
+            'Membaca: 8 sensor di depan melaporkan sensor mana yang sedang berada di atas garis.',
+            'Memutuskan: Arduino mengubahnya menjadi error, yaitu seberapa jauh garis bergeser ke kiri atau ke kanan.',
+            'Bertindak: driver motor memperlambat satu roda dan menjaga roda lain tetap cepat, sehingga robot melengkung kembali ke garis.',
+            'Pelajaran berikutnya membuka setiap bagian dari putaran itu, lalu tiga jenis program yang akan kamu tulis: setup, gerak dasar, dan simpangan.',
         ],
         tryIt: 'Tekan Simulasi dengan program bawaan dan lihat titik sensor berubah merah saat robot bergerak.',
     },
     power: {
         title: 'Daya: baterai LiPo dan saklar',
+        hook: 'Program yang sama dengan baterai hampir habis menghasilkan robot yang berbeda: lebih lambat, dan cara beloknya berubah. Karena itu, daya dibahas lebih dulu.',
         body: [
-            'Semuanya berawal dari LiPo 3 sel (≈ 11,1 V). Motor memakai sebagian besar arus. Nano dan sensor hanya butuh sedikit.',
-            'Baterai lemah membuat robot lebih lambat dan mengubah cara robot berbelok, jadi cek persentase di OLED sebelum setiap percobaan.',
+            'Semuanya berjalan dari LiPo 3 sel (≈ 11,1 V). Motor memakai sebagian besar arus. Nano dan sensor hanya butuh sedikit.',
+            'Jadikan kebiasaan: cek persentase baterai di OLED sebelum setiap percobaan, dan isi ulang sebelum terlalu rendah.',
         ],
     },
     brain: {
         title: 'Program setup: Arduino Nano',
+        hook: 'Setiap sketch yang kamu tulis punya kerangka yang sama. Pahami sekali, dan semua program setelah ini jadi mudah dibaca.',
         body: [
-            'Setiap program punya bentuk yang sama. setup() berjalan sekali: menyiapkan pin (mazeSetup), menampilkan logo, mengatur ambang sensor dan gain PID, lalu menunggu tombol start.',
-            'loop() berisi rutemu: blok yang kamu susun di Blockly menjadi baris seperti my.rl(100, 100); di sini. Di akhir, my.end() mematikan sensor dan mereset board.',
+            'setup() berjalan sekali saat robot dinyalakan. Ia menyiapkan pin (mazeSetup), mengatur ambang sensor dan gain PID, lalu menunggu di menu start sampai kamu menekan Go.',
+            'loop() berisi rutemu. Setiap blok yang kamu susun di Blockly menjadi satu baris di sini, misalnya my.rl(100, 120);. Baris terakhir, my.end(), mematikan sensor dan mereset board.',
         ],
-        tryIt: 'Klik "Unduh .ino" dan buka filenya: cari setup(), loop(), dan blok-blokmu.',
+        code: 'void setup() {\n  my.mazeSetup();      // pin, OLED, servo\n  my.pidSet(28, 8, 8); // gain kemudi\n  my.start();          // tunggu "Go"\n}\n\nvoid loop() {\n  my.rl(100, 120);     // rutemu di sini\n  my.end();\n}',
+        tryIt: 'Buka tab Kode, atau klik "Unduh .ino", lalu cari setup(), loop(), dan baris hasil blok-blokmu.',
     },
     eyes: {
         title: 'Mata robot: sensor garis 8 kanal',
+        hook: 'Robot sebenarnya tidak pernah melihat garis. Setiap sensor hanya mengukur seberapa banyak cahaya yang dipantulkan kembali oleh lantai.',
         body: [
             'Setiap sensor memberi angka. sensorSet() menyimpan satu ambang per sensor, dan setiap pembacaan diubah menjadi "garis" atau "bukan garis". Lantai dan pencahayaan sungguhan berbeda-beda, karena itu robot asli punya menu kalibrasi.',
-            'lineColour(0) berarti garis gelap di lantai terang, lineColour(1) berarti garis terang di lantai gelap.',
-            'Ke-8 hasil itu membentuk pola. 00011000 berarti di tengah, 11000000 berarti garis jauh di kiri, 11111111 biasanya berarti persimpangan.',
+            'lineColour(0) untuk garis gelap di lantai terang, lineColour(1) untuk garis terang di lantai gelap.',
+            'Jajarkan ke-8 hasilnya dan kamu mendapat pola yang bisa dibaca program:',
         ],
-        tryIt: 'Seret robot (tampilan 2D) perlahan melintasi garis dan lihat sensor mana yang menyala.',
+        code: '00011000   garis di tengah\n11000000   garis jauh di kiri\n00000011   garis jauh di kanan\n11111111   biasanya persimpangan',
+        tryIt: 'Di tampilan 2D, seret robot perlahan melintasi garis dan lihat sensor mana yang menyala.',
     },
     muscles: {
         title: 'Program dasar: motor dan driver',
+        hook: 'Setiap gerakan bermuara pada dua angka: seberapa cepat roda kiri berputar dan seberapa cepat roda kanan.',
         body: [
-            'motor(kiri, kanan, waktu) adalah perintah paling dasar: mengatur kecepatan kedua roda (−255…255), menunggu selama waktu milidetik, lalu berhenti.',
-            'Nilai negatif membuat roda mundur. Di robot asli motor() selalu menghentikan roda saat waktunya habis. Di simulator, waktu 0 membuat motor tetap berjalan, jadi blok berikutnya langsung mengambil alih tanpa berhenti.',
+            'motor(kiri, kanan, waktu) adalah perintah paling dasar. Ia mengatur kecepatan kedua roda (−255 sampai 255), menunggu selama waktu milidetik, lalu berhenti.',
+            'Kecepatan negatif membuat roda itu mundur. Di robot asli motor() selalu berhenti saat waktunya habis. Di simulator, waktu 0 membuat motor tetap berjalan, jadi blok berikutnya langsung mengambil alih tanpa jeda.',
         ],
-        tryIt: 'Susun: motor(150, 150, 800) lalu motor(-150, -150, 800). Robot seharusnya kembali ke tempat awal.',
+        code: 'my.motor(150, 150, 800);   // maju\nmy.motor(-150, -150, 800); // lalu mundur lagi',
+        tryIt: 'Jalankan dua baris di atas. Robot seharusnya kembali ke tempat awal.',
     },
     steering: {
         title: 'Berbelok dengan dua roda',
+        hook: 'Tidak ada setir. Seperti tank, robot berbelok dengan membuat satu sisi lebih cepat dari sisi lainnya.',
         body: [
-            'Differential drive: selisih kecepatan = belokan. Selisih besar memberi belokan tajam, arah berlawanan membuat robot berputar di tempat.',
-            'tright() dan tleft() memakai cara ini: berputar di tempat sampai sensor menemukan garis lagi, sehingga robot mengakhiri belokan lurus dengan garis baru.',
+            'Cara ini disebut differential drive. Selisih kecepatan kecil membuat lengkungan lebar, selisih besar membuat belokan tajam, dan roda yang berputar berlawanan arah membuat robot berputar di tempat.',
+            'tright() dan tleft() memakai putaran di tempat itu: berputar sampai sensor menemukan garis lagi, sehingga robot selalu mengakhiri belokan lurus dengan garis baru.',
         ],
+        code: 'my.motor(150, 60, 500);   // lengkung lebar ke kanan\nmy.motor(120, -120, 300); // berputar di tempat\nmy.tright(100);           // putar sampai ketemu garis',
     },
     pid: {
         title: 'Mengikuti garis dengan PID',
+        hook: 'Kemudi terlalu sedikit, robot keluar di tikungan. Terlalu banyak, robot zig-zag. PID menghitung takaran yang pas, berkali-kali setiap detik.',
         body: [
-            'lineTrace() membaca sensor dan mencari polanya di tabel: tengah = 0, garis di kiri memberi +1 … +7, di kanan −1 … −7.',
-            'Lalu menghitung koreksi: P (proporsional) bereaksi pada error saat ini, I memakai jumlah dua error terakhir, D bereaksi pada seberapa cepat error berubah. pidSet(28, 8, 8) mengatur gain-nya.',
-            'Koreksi memperlambat satu roda: kiri = power − koreksi, kanan = power + koreksi, dan tidak ada roda yang lebih cepat dari power.',
-            'Kp terlalu kecil membuat robot keluar di tikungan. Terlalu besar membuatnya bergoyang. Kd meredam goyangan.',
+            'lineTrace() membaca sensor dan mencari polanya di tabel: di tengah bernilai 0, garis di kiri memberi +1 sampai +7, di kanan −1 sampai −7. Angka itulah error-nya.',
+            'P bereaksi pada error saat ini. I menjumlahkan dua error terakhir. D bereaksi pada seberapa cepat error berubah. pidSet(28, 8, 8) mengatur seberapa kuat masing-masing berpengaruh.',
+            'Koreksinya memperlambat satu roda: kiri = power − koreksi, kanan = power + koreksi, dan tidak ada roda yang lebih cepat dari power.',
+            'Tips setel: kalau robot keluar di tikungan, naikkan Kp. Kalau bergoyang, turunkan Kp atau naikkan Kd untuk meredamnya.',
         ],
-        tryIt: 'Pakai blok Line Delay (ld) dengan power 80, lalu 200. Perhatikan bahwa kecepatan tinggi lebih butuh koreksi.',
+        code: 'my.pidSet(28, 8, 8); // Kp, Ki, Kd\nmy.ld(100, 2000);    // ikuti garis selama 2 detik',
+        tryIt: 'Jalankan blok Line Delay (ld) dengan power 80, lalu 200. Di kecepatan tinggi, koreksi jauh lebih berpengaruh.',
     },
     junctions: {
         title: 'Program simpangan: belok dan cabang',
+        hook: 'Lintasan lomba adalah peta persimpangan. Programmu adalah daftar arahnya: kanan di sini, lurus di sana, kiri setelahnya, sampai finish.',
         body: [
-            'Lintasan maze dan lomba terdiri dari persimpangan. Semua fungsi simpangan bekerja dengan cara yang sama: ikuti garis sampai muncul pola sensor tertentu, maju sedikit (step, dalam ms) supaya roda sampai di persimpangan, lalu belok atau lanjut.',
-            'Sensor berada 14,5 cm di depan roda, jadi step harus membawa robot sejauh itu. Pada power 100, step 100 sudah belok dengan halus dan step 120 menempatkan as tepat di persimpangan untuk belokan yang rapi. Step terlalu panjang membuat belokan menangkap garis berikutnya.',
-            'rl / ll: ambil cabang kanan / kiri berikutnya. prl / pll: lewati cabang kanan / kiri dan lanjut. trigger, rls, lls, rld, lld: kamu memilih sensor penanda persimpangan. sac: ikuti garis sampai habis.',
+            'Semua fungsi simpangan bekerja dengan cara yang sama: ikuti garis sampai muncul pola sensor tertentu, maju sedikit (step, dalam ms) supaya roda sampai di persimpangan, lalu belok atau lanjut.',
+            'Sensor berada 14,5 cm di depan roda, jadi step harus membawa robot kira-kira sejauh itu. Pada power 100, step 100 sudah belok dengan halus dan step 120 menempatkan as roda tepat di persimpangan. Step terlalu panjang membuat belokan menangkap garis berikutnya.',
+            'rl / ll mengambil cabang kanan / kiri berikutnya. prl / pll melewati cabang kanan / kiri lalu lanjut. Dengan trigger, rls, lls, rld, dan lld kamu memilih sensor penanda persimpangan. sac mengikuti garis sampai habis.',
         ],
+        code: 'my.rl(100, 120);  // ambil kanan berikutnya\nmy.prl(100, 100); // lewati cabang kanan\nmy.ll(100, 120);  // ambil kiri berikutnya\nmy.sac(100);      // ikuti sampai garis habis',
         tryIt: 'Pilih Lintasan: Grid Maze dan jalankan rl(100, 120). Lalu coba step 200 dan lihat belokannya kelewatan ke garis berikutnya.',
     },
     interface: {
         title: 'Menu, layar, dan tombol',
+        hook: 'Sebelum bergerak, robot menunggumu. Setiap percobaan dimulai dari menu di OLED.',
         body: [
-            'Di robot asli tidak ada yang bergerak sampai kamu menekan OK pada "Go" di menu start(). Itu memberi waktu untuk meletakkan robot di garis start.',
+            'Di robot asli tidak ada yang bergerak sampai kamu memilih "Go" di menu start() dan menekan OK. Itu memberi waktu untuk meletakkan robot di garis start.',
             'Menu lainnya menguji kecepatan motor, mengkalibrasi sensor, dan menguji gripper.',
         ],
+        tryIt: 'Buka panel Robot di atas simulator dan pakai tombolnya untuk menjelajah menu.',
     },
 };

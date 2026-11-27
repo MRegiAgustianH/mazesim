@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Play, Square, RotateCcw, Save, Brain, Blocks, CheckCircle, X, ZoomIn, ZoomOut, Maximize, GraduationCap, BookOpen, Gamepad2 } from 'lucide-react';
+import { Download, Play, Square, RotateCcw, Save, Brain, Blocks, CheckCircle, X, ZoomIn, ZoomOut, Maximize, GraduationCap, BookOpen, Gamepad2, Code2 } from 'lucide-react';
 import logo from './assets/logo.svg';
 import { BlocklyWorkspace } from './blockly/BlocklyWorkspace';
 import { CanvasRenderer, type CanvasRendererHandle } from './simulator/CanvasRenderer';
@@ -15,11 +15,13 @@ const Robot3DView = React.lazy(() => import('./simulator/Robot3DView'));
 const LearnPanel = React.lazy(() => import('./learn/LearnPanel'));
 const LibraryPanel = React.lazy(() => import('./learn/LibraryPanel'));
 const RobotPanel = React.lazy(() => import('./oled/RobotPanel'));
+const CodeEditor = React.lazy(() => import('./code/CodeEditor'));
 
 const TRACKS: TrackId[] = ['loop', 'scurve', 'maze', 'croc_junior', 'croc_senior', 'custom', 'upload'];
 
 function App() {
   const arduinoCode = useStore((state) => state.arduinoCode);
+  const sketchCode = useStore((state) => state.sketchCode);
   const setArduinoCode = useStore((state) => state.setArduinoCode);
   const simulationState = useStore((state) => state.simulationState);
   const setSimulationState = useStore((state) => state.setSimulationState);
@@ -120,7 +122,7 @@ function App() {
   };
 
   const handleDownload = () => {
-    const blob = new Blob([arduinoCode], { type: 'text/plain' });
+    const blob = new Blob([editorMode === 'code' ? sketchCode : arduinoCode], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -222,6 +224,7 @@ function App() {
             <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
               {([
                 ['blockly', 'tab.blockly', Blocks],
+                ['code', 'tab.code', Code2],
                 ['ai', 'tab.ai', Brain],
                 ['learn', 'tab.learn', GraduationCap],
                 ['library', 'tab.library', BookOpen],
@@ -254,6 +257,7 @@ function App() {
               />
             </div>
             <React.Suspense fallback={null}>
+              {editorMode === 'code' && <CodeEditor />}
               {editorMode === 'learn' && <LearnPanel />}
               {editorMode === 'library' && <LibraryPanel />}
             </React.Suspense>

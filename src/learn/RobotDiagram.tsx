@@ -80,6 +80,16 @@ export const RobotDiagram: React.FC<Props> = ({ selected, emphasis = [], onSelec
                 .robot-part:focus-visible .part-ring { stroke: #2563eb; stroke-width: .25; opacity: 1; }
                 .robot-part .part-ring.band { stroke-width: ${BAR_WIDTH + 0.6}; stroke-dasharray: none; }
                 .robot-part:not([data-state=""]) .part-ring.band { opacity: .35; }
+                /* Blink in step with the simulator's pulsing highlight (~1.1 s) */
+                @keyframes part-blink { 0%, 100% { opacity: 1; } 50% { opacity: .15; } }
+                @keyframes part-blink-band { 0%, 100% { opacity: .4; } 50% { opacity: .05; } }
+                .robot-part[data-state="sel"] .part-ring,
+                .robot-part[data-state="em"] .part-ring { animation: part-blink 1.13s ease-in-out infinite; }
+                .robot-part[data-state="sel"] .part-ring.band,
+                .robot-part[data-state="em"] .part-ring.band { animation-name: part-blink-band; }
+                @media (prefers-reduced-motion: reduce) {
+                    .robot-part .part-ring { animation: none !important; }
+                }
             `}</style>
             <svg viewBox={`${VB.x} ${VB.y} ${VB.w} ${VB.h}`} className="w-full flex-1 min-h-0" role="group" aria-label={t('learn.diagram')}>
                 {/* Body first so everything else sits on top of it */}

@@ -1,34 +1,13 @@
 import React from 'react';
-import { Check, ChevronDown, Copy, Info, Puzzle, Search } from 'lucide-react';
+import { ChevronDown, Info, Puzzle, Search } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import type { PartId } from '../simulator/robotLayout';
 import { getCategories, getLibrary, getPart } from './localized';
 import type { CategoryId, LibFunction } from './libraryDocs';
 import { useT } from '../i18n/i18n';
+import { Note, CodeSample } from './ui';
 
 const labelCls = 'text-[11px] font-semibold uppercase tracking-wide text-slate-500';
-
-const CopyButton: React.FC<{ text: string }> = ({ text }) => {
-    const t = useT();
-    const [done, setDone] = React.useState(false);
-    const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setDone(true);
-            setTimeout(() => setDone(false), 1500);
-        } catch { /* clipboard blocked */ }
-    };
-    return (
-        <button
-            onClick={copy}
-            className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 h-6 px-2 rounded text-[11px] text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-            aria-label={t('lib.copyLabel')}
-        >
-            {done ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {done ? t('lib.copied') : t('lib.copy')}
-        </button>
-    );
-};
 
 const FunctionCard: React.FC<{ fn: LibFunction; open: boolean; onToggle: () => void; cardRef?: React.Ref<HTMLDivElement> }> = ({ fn, open, onToggle, cardRef }) => {
     const setEditorMode = useStore(s => s.setEditorMode);
@@ -38,7 +17,7 @@ const FunctionCard: React.FC<{ fn: LibFunction; open: boolean; onToggle: () => v
     const showPart = (id: PartId) => { setHighlightPart(id); setEditorMode('learn'); };
 
     return (
-        <div ref={cardRef} className={`rounded-lg border transition-colors ${open ? 'border-blue-300 bg-white shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+        <div ref={cardRef} className={`rounded-lg border transition-colors ${open ? 'border-slate-300 bg-white shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
             <button onClick={onToggle} className="w-full text-left px-3 py-2.5 flex items-start gap-2" aria-expanded={open}>
                 <div className="flex-1 min-w-0">
                     <div className="font-mono text-sm font-semibold text-slate-900">{fn.name}()</div>
@@ -78,17 +57,11 @@ const FunctionCard: React.FC<{ fn: LibFunction; open: boolean; onToggle: () => v
 
                     <div>
                         <div className={`${labelCls} mb-1`}>{t('lib.example')}</div>
-                        <div className="relative">
-                            <pre className="text-xs font-mono text-slate-100 bg-slate-900 rounded-md px-3 py-2.5 pr-20 overflow-x-auto"><code>{fn.example}</code></pre>
-                            <CopyButton text={fn.example} />
-                        </div>
+                        <CodeSample code={fn.example} copy />
                     </div>
 
                     {fn.sim && (
-                        <div className="flex gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
-                            <Info className="w-4 h-4 flex-shrink-0 mt-px" />
-                            <span><span className="font-semibold">{t('lib.inSim')} </span>{fn.sim}</span>
-                        </div>
+                        <Note icon={Info} title={t('lib.inSim')}>{fn.sim}</Note>
                     )}
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
@@ -101,14 +74,16 @@ const FunctionCard: React.FC<{ fn: LibFunction; open: boolean; onToggle: () => v
                         {fn.parts.length > 0 && (
                             <span className="inline-flex flex-wrap items-center gap-1">
                                 <span className="text-slate-500">{t('lib.hardware')}</span>
-                                {fn.parts.map(id => (
-                                    <button
-                                        key={id}
-                                        onClick={() => showPart(id)}
-                                        className="px-1.5 py-0.5 rounded border border-orange-200 bg-orange-50 text-[11px] text-orange-800 hover:bg-orange-100 transition-colors"
-                                    >
-                                        {getPart(id, lang).name}
-                                    </button>
+                                {fn.parts.map((id, i) => (
+                                    <React.Fragment key={id}>
+                                        {i > 0 && <span className="text-slate-300" aria-hidden>·</span>}
+                                        <button
+                                            onClick={() => showPart(id)}
+                                            className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-600 transition-colors"
+                                        >
+                                            {getPart(id, lang).name}
+                                        </button>
+                                    </React.Fragment>
                                 ))}
                             </span>
                         )}
